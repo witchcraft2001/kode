@@ -231,7 +231,7 @@ ReplNxt:
 	JP	LoadNew
 ; Procedure import current in TAS file
 ConvPromt
-	JP	ConvTXTtoTAS
+	JP	ImportTXT
 	LD	HL,DimprtP
 	CALL	DialogW
 	LD	HL,what			
@@ -243,7 +243,7 @@ ConvPromt
 	LD	A,(HL)
 	CP	cmYes			; Exit
 	RET	NZ				
-	JP	ConvTXTtoTAS
+	JP	ImportTXT
 ImportFile
 	LD	HL,what
 	LD	(HL),evNothing
@@ -277,13 +277,13 @@ ImportFile
 	EX	AF,AF'			; Error
 	JP	C,CloseFile		; And<>0 then loaded less 040h
 	OR	A				; Byte
-	JP	NZ,ConvTXTtoTAS	; For comparison
+	JP	NZ,ImportTXT	; For comparison
 	LD	HL,FuncBuffer	; Header TAS
 	LD	DE,FHeader		
 	LD	B,#04
 	LD	A,(DE)			
 	CP	(HL)
-	JP	NZ,ConvTXTtoTAS	
+	JP	NZ,ImportTXT	
 	INC	HL
 	INC	DE
 	DJNZ	$-7
@@ -384,7 +384,7 @@ SaveFl3	LD	A,(IX+#1D)	; 1 text page
 	EX	AF,AF'
 	JP	C,SaveFileAs	
 SaveTAS:
-	JP	ConvTAStoTXT
+	JP	ExportTXT
 	LD	(IY+#17),#01	; Was not touched
 	CALL	OnlySyntax
 	LD	A,(ReadyStr)	
@@ -612,8 +612,8 @@ extf1	INC	HL
 	OUT	(SLOT0),A			; Restore 0 page
 	POP	IY				; Restore.register
 	EX	AF,AF'
-	JP	C,ConvTAStoTXT	; File not
-	LD	IX,ConvTAStoTXT
+	JP	C,ExportTXT	; File not
+	LD	IX,ExportTXT
 	JP	OvrwrtD
 ;[]===========================================================[]
 ; Procedure write new name window

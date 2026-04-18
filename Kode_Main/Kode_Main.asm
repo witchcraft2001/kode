@@ -346,7 +346,7 @@ ResCurs	LD	A,(CurFlag)
 	INCLUDE	'Function.asm'
 	INCLUDE	'Function2.asm'
 	INCLUDE	'Function3.asm'
-	INCLUDE	'ASMconv.asm'
+	INCLUDE	'TextIO.asm'
 FILLend_KodeMain	EQU $
 ;---------------------------------------------------------------------/*/
  ; !fixit

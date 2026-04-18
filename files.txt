@@ -34,9 +34,9 @@ Function        ; file and editor functions
 Function2       ;
 Function3       ;
 
-ASMconv         ; TAS conversion to/from text
-ASMconv2        ;
-ASMconv3        ;
+TextIO          ; text import/export
+Asmconv2        ;
+Asmconv3        ;
 
 DialogWn        ; dialog windows handler (main)
 DialogWn1       ;

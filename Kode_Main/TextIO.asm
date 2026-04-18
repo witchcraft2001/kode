@@ -2,7 +2,7 @@
 ;[]===========================================================[]
 ; Procedure conversion text in TAS file
 ;[]===========================================================[]
-ConvTXTtoTAS
+ImportTXT
 	LD	IX,TxtWtab	; Table window descriptors
 	BIT	7,(IX+#00)	; 7=1 - open 1 window
 	JR	NZ,ConvNxt
@@ -20,7 +20,7 @@ ConvNxt	LD	HL,KeyBuff+#21	; Pages new text
 	PUSH	AF
 	LD	A,(DialogPg1)
 	OUT	(SLOT2),A
-	LD	HL,ConTXTTAS	; Procedure from process
+	LD	HL,ProcessImportTXT	; Procedure from process
 	LD	(ConCall),HL
 	LD	DE,ConName	; Name for.window
 	PUSH	DE
@@ -191,7 +191,7 @@ extf	INC	HL
 ; ----
 ; On exit:
 ; CY
-ConTXTTAS
+ProcessImportTXT
 	LD	IX,(RealBytes)	; Count-in byte
 	LD	HL,(BegTXTstr)	; Next
 	LD	DE,ReCompBuff	; Internal operation
@@ -610,7 +610,7 @@ CurFPoint
 ;[]===========================================================[]
 ; Procedure conversion TAS in file
 ;[]===========================================================[]
-ConvTAStoTXT
+ExportTXT
 	LD	IX,TxtWtab	; Table window descriptors
 	CALL	OnlySyntax	; Syntax-highlight last line
 	CALL	PutString	; Insert it in text
@@ -620,7 +620,7 @@ ConvTAStoTXT
 	PUSH	AF
 	LD	A,(DialogPg1)
 	OUT	(SLOT2),A
-	LD	HL,ConTASTXT	; From process
+	LD	HL,ProcessExportTXT	; From process
 	LD	(ConCall),HL
 	LD	DE,ConName	; Name for.window
 	PUSH	DE
@@ -722,7 +722,7 @@ ConATex	CALL	ResCurs		; Disable cursor
 ; ----
 ; On exit:
 ; CY
-ConTASTXT
+ProcessExportTXT
 	IN	A,(SLOT2)		; Save 2 and 3 pages
 	LD	C,A
 	IN	A,(SLOT3)
