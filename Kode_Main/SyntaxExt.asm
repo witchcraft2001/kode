@@ -556,6 +556,7 @@ SynGN1:
 	LD	B,#3F
 SynGN2:
 	LD	A,(HL)
+	RES	7,A
 	LD	(DE),A
 	INC	HL
 	INC	DE

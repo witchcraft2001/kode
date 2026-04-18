@@ -101,6 +101,19 @@ SysComb	LD	A,(InsertMode)
 	LD	(IY-#03),A
 	INC	HL
 	LD	E,(HL)		;Key combination
+	LD	A,E
+	CP	142		; Shift+Up
+	JR	Z,SysNoClr
+	CP	144		; Shift+Down
+	JR	Z,SysNoClr
+	CP	147		; Begin mark
+	JR	Z,SysNoClr
+	CP	148		; End mark
+	JR	Z,SysNoClr
+	CP	149		; Clear mark
+	JR	Z,SysNoClr
+	RES	0,(IY-#04)
+SysNoClr:
 	LD	HL,CombinE-3
 SysLoop	INC	HL
 	INC	HL
