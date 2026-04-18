@@ -234,6 +234,13 @@ LstByte	LD	A,#00		; Byte
 	CP	#F0
 	JR	NC,ConvCyc
 	LD	C,LX
+	LD	A,C
+	OR	A
+	JR	NZ,ConvCyc
+	SUB	A
+	LD	(LstByte+1),A
+	SCF
+	JP	ConvExt
 ConvCyc	LD	B,C
 ConvTA1	LD	A,(HL)		; 0
 	OR	A
@@ -242,8 +249,7 @@ ConvTA1	LD	A,(HL)		; 0
 	DEC	IX
 	CP	#0D
 	JR	Z,MoveCEx
-	CP	#09
-	JR	NZ,ConvTA3
+	JR	ConvTA3
 	LD	C,#08
 ConvTB0	LD	A,HX
 	OR	LX

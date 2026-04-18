@@ -654,9 +654,7 @@ DeCompExt
 TABcorrect
 	LD	HL,CompBuff
 	LD	DE,ReCompBuff
-	LD	A,(OptimalTAB)
-	OR	A
-	JR	Z,TABnocorr
+	JR	TABnocorr
 	LD	C,#20
 TABcorL	LD	A,(DE)
 	OR	A
