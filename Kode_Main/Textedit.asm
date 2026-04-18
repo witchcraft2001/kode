@@ -1167,33 +1167,40 @@ _Del_	LD	H, high TextBuff
 	LD	(IY-#01),A
 	RET 
 PlusStr	LD	HL,(BegString)
-	LD	C,(HL)
+	LD	A,(HL)
+	LD	C,A
 	LD	B,#00
-	ADD	HL,BC
+	ADD	HL,BC		; HL -> next line record
 	LD	A,(HL)
 	OR	A
-	RET	Z	; End text
+	RET	Z		; no next line
+	LD	(PlsNextLen),A
 	PUSH	HL
 	POP	IX
-	LD	A,(IY+#02)
-	PUSH	AF
 	LD	HL,ReCompBuff
-	CALL	ReCompile
-	POP	AF
-	LD	E,A
-	ADD	A,(IY+#02)
+	CALL	ReCompile	; next line -> ReCompBuff
+	LD	A,(IX+#00)
+	CP	#03
+	JR	NC,PlsLen0
+	XOR	A
+	JR	PlsLen1
+PlsLen0:	SUB	#03
+PlsLen1:	LD	D,A		; next payload len
+	LD	A,(IY+#02)
+	LD	E,A		; current payload len
+	ADD	A,D
 	RET	C
 	CP	241
 	RET	NC
-	PUSH	AF
-	LD	A,(IY+#02)
+	LD	(IY+#02),A	; merged payload len
+	LD	A,D
 	ADD	A,A
 	LD	C,A
 	LD	A,#00
 	ADC	A,A
 	LD	B,A
 	OR	C
-	JR	Z,PlsDEL
+	JR	Z,PlsMrg1
 	LD	HL,ReCompBuff
 	LD	D, high TextBuff
 	LD	A,E
@@ -1201,20 +1208,43 @@ PlusStr	LD	HL,(BegString)
 	LD	E,A
 	JR	NC,$+3
 	INC	D
-	LDIR 
-PlsDEL	POP	AF
-	LD	(IY+#02),A
+	LDIR			; append next payload to TextBuff
+PlsMrg1:
 	CALL	OnlySyntax
+	CALL	PutString		; store merged current line record
 	LD	HL,(BegString)
-	PUSH	HL
 	LD	A,(HL)
 	LD	C,A
 	LD	B,#00
-	ADD	HL,BC
-	ADD	A,(HL)
-	POP	HL
+	ADD	HL,BC		; HL = dst (start of old next line)
+	PUSH	HL
+	LD	A,(PlsNextLen)
+	LD	C,A
+	LD	B,#00
+	ADD	HL,BC		; HL = src (after old next line)
+	PUSH	HL
+	LD	DE,(EndText)
+	EX	DE,HL		; HL=end, DE=src
+	OR	A
+	SBC	HL,DE		; HL=count
+	LD	B,H
+	LD	C,L
+	POP	HL		; HL=src
+	POP	DE		; DE=dst
+	LD	A,B
+	OR	C
+	JR	Z,PlsMrg2
+	LDIR
+PlsMrg2:
+	LD	HL,(EndText)
+	LD	A,(PlsNextLen)
+	LD	C,A
+	LD	B,#00
+	OR	A
+	SBC	HL,BC
+	LD	(EndText),HL
+	XOR	A
 	LD	(HL),A
-	CALL	PutString
 	CALL	PrintPage
 	SUB	A
 	LD	(ReadyStr),A
@@ -1228,6 +1258,7 @@ PlsDEL	POP	AF
 	LD	(EquipLn),HL
 	CALL	PrintInfo
 	JP	TestEnd
+PlsNextLen:	DEFB	#00
 ;[]===========================================================[]
 HomeStr	LD	A,(IY+#00)
 	ADD	A,(IY+#07)

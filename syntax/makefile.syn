@@ -1,0 +1,5 @@
+case_sensitive=1
+line_comment=#
+string_delims="'
+keywords=all,clean,install,test,run,build,default,phony,include,override,export,unexport,define,endef,ifneq,ifeq,ifdef,ifndef,else,endif
+keywords2=cc,cxx,as,ld,ar,cflags,cxxflags,ldflags,cppflags

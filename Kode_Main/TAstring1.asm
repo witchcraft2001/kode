@@ -425,7 +425,7 @@ CompLp1	LD	A,(HL)
 	JR	Z,CompNx1
 	INC	HL
 	INC	HL
-	CP	";"
+	CP	#00
 	JR	Z,CommCmp
 	INC	C
 	CP	#20

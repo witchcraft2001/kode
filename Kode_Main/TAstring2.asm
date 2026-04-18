@@ -50,7 +50,7 @@ ReCompLp1
 	INC	E
 	CP	#20
 	JR	C,ReSpaceM
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -77,7 +77,7 @@ ReCompNxt:
 	INC	E
 	CP	#20
 	JR	C,ReSpaceM
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	HX,A
 	LD	A,(DE)
@@ -174,7 +174,7 @@ PrgR01l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -216,7 +216,7 @@ PrgR02l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr02Ex
-	CP	";"
+	CP	#00
 	JR	Z,Pr02Ex
 	LD	(HL),A
 	INC	HL
@@ -232,7 +232,7 @@ Pr02Ex	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -257,7 +257,7 @@ PrgR03l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -291,7 +291,7 @@ PrgR04l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr04Ex
-	CP	";"
+	CP	#00
 	JR	Z,Pr04Ex
 	LD	(HL),A
 	INC	HL
@@ -307,7 +307,7 @@ Pr04Ex	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -354,7 +354,7 @@ PrgR05l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr05Ex
-	CP	";"
+	CP	#00
 	JR	Z,Pr05Ex
 	LD	(HL),A
 	INC	HL
@@ -370,7 +370,7 @@ Pr05Ex	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -400,7 +400,7 @@ PrgR06l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -439,7 +439,7 @@ PrgR07l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr07Ex
-	CP	";"
+	CP	#00
 	JR	Z,Pr07Ex
 	LD	(HL),A
 	INC	HL
@@ -455,7 +455,7 @@ Pr07Ex	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -491,7 +491,7 @@ PrgR08l	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -553,7 +553,7 @@ PrgR09n	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -595,7 +595,7 @@ PrgR0Al	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr0AEx
-	CP	";"
+	CP	#00
 	JR	Z,Pr0AEx
 	LD	(HL),A
 	INC	HL
@@ -621,7 +621,7 @@ Pr0AEx	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -641,7 +641,7 @@ PrgR0Bl	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr0BEx
-	CP	";"
+	CP	#00
 	JR	Z,Pr0BEx
 	LD	(HL),A
 	INC	HL
@@ -672,7 +672,7 @@ Pr0BEx	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -692,7 +692,7 @@ PrgR0Cl	LD	A,(DE)
 	INC	E
 	CP	#20
 	JR	C,Pr0CEx
-	CP	";"
+	CP	#00
 	JR	Z,Pr0CEx
 	LD	(HL),A
 	INC	HL
@@ -718,7 +718,7 @@ Pr0CEx	EX	AF,AF'
 	EX	AF,AF'
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	JP	FillEnd
 
@@ -734,7 +734,7 @@ PrgR13l	LD	A,(TmpColL)
 	JP	C,ReCompEx
 	BIT	0,C
 	JR	NZ,$+7
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -805,7 +805,7 @@ PrgR3En	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -886,7 +886,7 @@ PrgR3Fn	LD	A,(DE)
 	INC	E
 	CP	#20
 	JP	C,ReCompEx
-	CP	";"
+	CP	#00
 	JP	Z,ReCommMn
 	LD	(HL),A
 	INC	HL
@@ -901,7 +901,7 @@ ReCompEx
 	JP	Z,FillEnd
 	LD	A,(DE)
 	INC	E
-	CP	";"
+	CP	#00
 	JR	Z,ReCommMn
 	JR	ReCompEx
 
@@ -991,7 +991,7 @@ ReCompErrLp
 	INC	E
 	CP	#20
 	JR	C,ReSpace
-	CP	";"
+	CP	#00
 	JR	Z,ReCommErr
 	LD	(HL),A
 	INC	HL
@@ -1067,7 +1067,7 @@ FEnd2:	LD	A,(EditMode)
 	OR	A
 	RET	Z
 	LD	A,(IY+#00)
-	CP	#FF
+	CP	#00
 	RET	Z
 	ADD	A,(IY+#07)
 	SUB	(IY+#02)

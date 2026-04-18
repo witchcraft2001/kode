@@ -343,6 +343,7 @@ ResCurs	LD	A,(CurFlag)
 	INCLUDE	'TextEdit.asm'
 	INCLUDE	'TextEdit2.asm'
 	INCLUDE	'TextEdit3.asm'
+	INCLUDE	'SyntaxExt.asm'
 	INCLUDE	'Function.asm'
 	INCLUDE	'Function2.asm'
 	INCLUDE	'Function3.asm'

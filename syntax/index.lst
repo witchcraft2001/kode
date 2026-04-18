@@ -1,0 +1,5 @@
+; syntax index: <profile-file>=<ext-or-name>[,<ext-or-name>...]
+asm.syn=asm,z80,zas,tas,inc,s
+c.syn=c,h,cpp,hpp
+bat.syn=bat,cmd
+makefile.syn=makefile,gnumakefile,mk,mak,make

@@ -1,0 +1,6 @@
+case_sensitive=0
+line_comment=rem
+line_comment2=::
+string_delims="
+keywords=assoc,attrib,break,call,cd,chcp,chdir,cls,cmd,color,copy,date,del,dir,echo,endlocal,erase,exit,for,ftype,goto,if,md,mkdir,move,path,pause,popd,prompt,pushd,rd,rem,ren,rename,rmdir,set,setlocal,shift,start,time,title,type,ver,vol
+keywords2=equ,exist,errorlevel,not

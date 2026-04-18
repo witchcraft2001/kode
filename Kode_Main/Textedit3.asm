@@ -1295,24 +1295,12 @@ SaveProec:
 	POP	HL
 	RET 
 
-; Kode syntaxis routine
-Syntax:	LD	HL,PrintS
-	PUSH	HL
-
+; Kode syntax routine
+Syntax:	CALL	SyntaxExtTry
+	JP	PrintS
 
 OnlySyntax:
- IF NEW_VERSION
-	INCLUDE	"Syntaxis.asm"
- ELSE
-	IN	A,(SLOT3)
-	PUSH	AF
-	LD	A,(DialogPg2)
-	OUT	(SLOT3),A
-	CALL	Syntaxis
-	POP	AF
-	OUT	(SLOT3),A
-	RET 
- ENDIF
+	JP	SyntaxExtTry
 
 BegTabl:		DEFW	#0000
 BegAtbl:		DEFW	#0000
@@ -1440,70 +1428,96 @@ ExStrNx:	LD	A,E
 
 CompileStr:
 	LD	IX,CompBuff
+	LD	(IX+#01),#02
+	BIT	0,(IY-#04)
+	JR	Z,CmpStr0
+	SET	6,(IX+#01)
+CmpStr0:
 	LD	HL,TextBuff
 	LD	DE,CompBuff+2
-
- IF NEW_VERSION
-	CALL	Compile
- ELSE
-	IN	A,(SLOT3)
-	PUSH	AF
-	LD	A,(DialogPg2)
-	OUT	(SLOT3),A
-	CALL	Compile
-	POP	AF
-	OUT	(SLOT3),A
- ENDIF
-	LD	A,E		; ASM
-	INC	A
+	LD	A,(IY+#02)
+	LD	B,A
+CmpStrLp:
+	LD	A,B
+	OR	A
+	JR	Z,CmpStrEnd
+	LD	A,(HL)
 	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	CmpStrLp
+CmpStrEnd:
+	LD	A,(IY+#02)
+	ADD	A,#03
 	LD	(IX+#00),A
+	LD	(DE),A
 	RET 
 
- IF NEW_VERSION
-	INCLUDE	'TAstring1.asm'
- ENDIF
+ReCompile:
+	PUSH	HL
+	POP	DE
+	LD	A,(IX+#00)
+	CP	#03
+	JR	NC,ReCmpA0
+	LD	A,#03
+ReCmpA0:
+	SUB	#03
+	LD	B,A
+	LD	C,A
+	PUSH	IX
+	POP	HL
+	INC	HL
+	INC	HL
+ReCmpALp:
+	LD	A,B
+	OR	A
+	JR	Z,ReCmpAEnd
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	LD	A,(ColTxtWin)
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DEC	B
+	JR	ReCmpALp
+ReCmpAEnd:
+	XOR	A
+	LD	(DE),A
+	INC	DE
+	LD	A,(ColTxtWin)
+	LD	(DE),A
+	INC	DE
+	LD	A,#F1
+	SUB	C
+	RET	Z
+	LD	B,A
+ReCmpFill:
+	XOR	A
+	LD	(DE),A
+	INC	DE
+	LD	A,(ColTxtWin)
+	LD	(DE),A
+	INC	DE
+	DJNZ	ReCmpFill
+	RET
 
 ReCompileStr:
 	LD	IX,(BegString)
 	LD	HL,TextBuff
-;---[?]
+	CALL	ReCompile
+	LD	A,(IX+#00)
+	CP	#03
+	JR	NC,ReCmpS0
+	XOR	A
+	LD	(IY+#02),A
+	RET
+ReCmpS0:
+	SUB	#03
+	LD	(IY+#02),A
+	RET
 
-ReCompile:
- IF NEW_VERSION
-	ld (SaveBuf+1),hl
- ENDIF
-	PUSH	HL
-	PUSH	IX
-	POP	HL
-	LD	DE,CompBuff
-	LD	C,(HL)
-	LD	B,#00
-	PUSH	DE
-	PUSH	DE
-	LDIR 
-	POP	IX
-	POP	DE
-	POP	HL
-	INC	E
-	INC	E
-	IN	A,(SLOT3)
-	PUSH	AF
- IF NEW_VERSION
-	LD	A,(AsmTabPg)
- ELSE
-	LD	A,(DialogPg2)
- ENDIF
-	OUT	(SLOT3),A
-
- IF NEW_VERSION
-	INCLUDE	'TAstring2.asm'
- ELSE
-	CALL	ReCompileE
-	POP	AF
-	OUT	(SLOT3),A
-	RET 
- ENDIF
- 
 ;
  _mCollectInfo_addEnd

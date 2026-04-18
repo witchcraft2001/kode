@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v mformat >/dev/null 2>&1 || ! command -v mcopy >/dev/null 2>&1; then
-  echo "Error: mtools is required (mformat and mcopy were not found)." >&2
+if ! command -v mformat >/dev/null 2>&1 || ! command -v mcopy >/dev/null 2>&1 || ! command -v mmd >/dev/null 2>&1; then
+  echo "Error: mtools is required (mformat, mcopy and mmd were not found)." >&2
   exit 1
 fi
 
@@ -26,5 +26,14 @@ mformat -C -i "$image_path" -f 1440 ::
 # Copy executable into image root as KODE.EXE
 mcopy -i "$image_path" -o "$exe_path" ::KODE.EXE
 
+# Copy external syntax profiles into SYNTAX directory
+mmd -i "$image_path" ::/SYNTAX
+mcopy -i "$image_path" -o "$repo_root/syntax/index.lst" ::/SYNTAX/INDEX.LST
+mcopy -i "$image_path" -o "$repo_root/syntax/asm.syn" ::/SYNTAX/ASM.SYN
+mcopy -i "$image_path" -o "$repo_root/syntax/c.syn" ::/SYNTAX/C.SYN
+mcopy -i "$image_path" -o "$repo_root/syntax/bat.syn" ::/SYNTAX/BAT.SYN
+mcopy -i "$image_path" -o "$repo_root/syntax/makefile.syn" ::/SYNTAX/MAKEFILE.SYN
+
 echo "Created FAT12 floppy image: $image_path"
 echo "Copied file: $exe_path -> ::KODE.EXE"
+echo "Copied syntax profiles into ::/SYNTAX"

@@ -3,6 +3,8 @@
 ; Procedure conversion text in TAS file
 ;[]===========================================================[]
 ImportTXT
+	LD	A,#01
+	LD	(SynExtBusy),A
 	LD	IX,TxtWtab	; Table window descriptors
 	BIT	7,(IX+#00)	; 7=1 - open 1 window
 	JR	NZ,ConvNxt
@@ -161,11 +163,14 @@ connmno	LDIR			; Copy
 	INC	A
 	DJNZ	$-6
 	CP	#0F
-	RET	C		; Less 15 - Okey
+	JR	C,ImpTxtExit	; Less 15 - Okey
 	LD	A,cmNew		; Already 15
 	CALL	CloseCmnd	; Command New
 	LD	A,NoConTxt	; Internal operation
 	CALL	PutStatusLn	; Status line
+ImpTxtExit:
+	XOR	A
+	LD	(SynExtBusy),A
 	RET 
 ;[]===========================================================[]
 ; Procedure conversion in TAS line
@@ -226,76 +231,73 @@ LstByte	LD	A,#00		; Byte
 ConvCyc	LD	B,C
 ConvTA1	LD	A,(HL)		; 0
 	OR	A
-	JR	Z,MoveCEx
+	JR	Z,MoveCE0
 	INC	HL
 	DEC	IX
 	CP	#0D
-	JR	Z,MoveCEx
-	JR	ConvTA3
-	LD	C,#08
-ConvTB0	LD	A,HX
-	OR	LX
-	JR	Z,ConvTB1
-	LD	A,(HL)
+	JR	Z,MoveCR
+	CP	#0A
+	JR	Z,MoveLF
 	CP	#09
-	JR	NZ,ConvTB1
-	LD	A,C
-	ADD	A,#08
+	JR	Z,ConvTab
+	CP	#20
+	JR	NC,ConvTA3
+	LD	A,#20
+	JR	ConvTA3
+
+ConvTab	LD	A,E
+	AND	#07
 	LD	C,A
-	INC	HL
-	DEC	IX
-	JR	ConvTB0
-ConvTB1	PUSH	BC		; Internal operation
-	LD	A,E
-	AND	#F8
-	ADD	A,C
-	LD	C,A
-	LD	A,(LabSize)
-	LD	B,A		; Size for labels
-	SUB	A
-	ADD	A,B
-	CP	C
-	JR	NC,ConvTA2
-	EX	AF,AF'
-	LD	A,(TabSize)
-	LD	B,A		; Size
-	EX	AF,AF'
-	ADD	A,B
-	CP	C
-	JR	C,$-2
-ConvTA2	SUB	E
+	LD	A,#08
+	SUB	C
 	LD	B,A
+ConvTabLp:	LD	A,E
+	CP	#EF
+	JR	NC,ConvTabSk
 	LD	A,#20
 	LD	(DE),A
 	INC	E
-	DJNZ	$-2
-	POP	BC
+ConvTabSk:	DJNZ	ConvTabLp
 	LD	A,HX
 	OR	LX
 	JR	NZ,ConvTA1
 	JR	MoveCE1
 ConvTA3
+	CALL	DosToScrChar
+	LD	C,A
+	LD	A,E
+	CP	#EF
+	JR	NC,ConvTA3Sk
+	LD	A,C
 	LD	(DE),A
 	INC	E
+ConvTA3Sk
 	DJNZ	ConvTA1
 	JR	MoveCE1
 MoveCEx	LD	A,(HL)		; Byte
 	LD	(LstByte+1),A
+	JR	MoveCE1
+MoveCE0:	LD	A,(HL)
+	LD	(LstByte+1),A
 	INC	HL
 	DEC	IX
+	JR	MoveCE1
+MoveCR	LD	A,(HL)		; Byte right after CR
+	CP	#0A
+	JR	NZ,MovePref
+	INC	HL		; Skip LF in CRLF
+	DEC	IX
+MoveLF:
+MovePref:	LD	A,(HL)
+	LD	(LstByte+1),A
 MoveCE1	LD	(RealBytes),IX	; Save..length
 	LD	(BegTXTstr),HL	; Next.text
 	SUB	A
 	LD	(DE),A
 	PUSH	IY
 	LD	IY,ConvData	; Data
-	LD	A,(CnTxtPg)	; Program conversion
-	OUT	(SLOT2),A
 	LD	(IY+#00),E	; Page
-	LD	A,(AsmTabPg)	; Table Z80 commands
-	OUT	(SLOT3),A
-	CALL	ConvSyntax	; Syntax-highlight line
-	CALL	CompTxtStr	; Line
+	CALL	PlainCompTxtStr	; Plain line pack
 	POP	IY
 textpg1	LD	A,#00		; 1 page text
 	OUT	(SLOT2),A
@@ -333,7 +335,42 @@ textpg2	LD	A,#00		; 2 page text
 	POP	AF
 	OUT	(SLOT2),A
 	OR	A
-	RET 
+	RET
+
+; Pack zero-terminated ReCompBuff line into CompBuff record.
+; Record layout: [len][flags][payload...][len]
+PlainCompTxtStr:
+	LD	IX,CompBuff
+	LD	(IX+#01),#02
+	BIT	0,(IY-#04)
+	JR	Z,PlnCmp0
+	SET	6,(IX+#01)
+PlnCmp0:
+	LD	HL,ReCompBuff
+	LD	DE,CompBuff+2
+	LD	B,#00
+PlnCmpLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,PlnCmpEnd
+	LD	A,B
+	CP	#FD
+	JR	NC,PlnCmpDrop
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	INC	B
+	INC	HL
+	JR	PlnCmpLp
+PlnCmpDrop:
+	INC	HL
+	JR	PlnCmpLp
+PlnCmpEnd:
+	LD	A,B
+	ADD	A,#03
+	LD	(IX+#00),A
+	LD	(DE),A
+	RET
 NxtTxtWind			; Next.TAS window
 	PUSH	BC
 	CALL	GetMemory	; Get free pages
@@ -603,6 +640,8 @@ SaveAddX
 ; Procedure conversion TAS in file
 ;[]===========================================================[]
 ExportTXT
+	LD	A,#01
+	LD	(SynExtBusy),A
 	LD	A,(IY+#00)	; Preserve cursor X
 	LD	(SaveCurX),A
 	LD	A,(IY+#07)	; Preserve horizontal offset
@@ -715,6 +754,8 @@ ConATex	CALL	ResCurs		; Disable cursor
 	LD	(IY+#17),#01	; Readyfile
 	CALL	SetCurs		; Enable.cursor
 	CALL	PrintInfo+4
+	XOR	A
+	LD	(SynExtBusy),A
 	RET 
 ;[]===========================================================[]
 ; Procedure conversion TAS in TXT line
@@ -748,8 +789,7 @@ ProcessExportTXT
 	OUT	(SLOT2),A
 	LD	A,(AsmTabPg)	; Table Z80 commands
 	OUT	(SLOT3),A
-	CALL	ConvDeComp	; TAS line in TXT
-	CALL	TABcorrect	; Internal operation
+	CALL	PlainExportLine	; Plain line in TXT
 	LD	HL,(BegTXTstr)	; Next.TXT
 	PUSH	HL		; BC
 	ADD	HL,BC		; Check on text
@@ -773,6 +813,70 @@ ConvATe	POP	BC
 ConvWRT	CALL	WriteBlock	; Block
 	SCF			; CY - flag end
 	JR	ConvATe		; Exit
+
+; Convert CompBuff record ([len][flags][payload][len]) into plain line in CompBuff.
+; Return BC = bytes to write (payload + CR).
+PlainExportLine:
+	LD	IX,CompBuff
+	LD	A,(IX+#00)
+	CP	#03
+	JR	NC,PlExp0
+	LD	A,#03
+PlExp0:
+	SUB	#03
+	LD	C,A		; keep payload length
+	LD	B,A
+	LD	HL,CompBuff+2
+	LD	DE,CompBuff
+	LD	A,B
+	OR	A
+	JR	Z,PlExp1
+PlExpCp:	LD	A,(HL)
+	CALL	ScrToDosChar
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DJNZ	PlExpCp
+	JR	PlExp1
+PlExp1:
+	LD	HL,CompBuff
+	LD	A,C
+	ADD	A,L
+	LD	L,A
+	JR	NC,$+3
+	INC	H
+	LD	(HL),#0D
+	INC	C
+	LD	B,#00
+	RET
+
+; A: DOS file byte -> screen/editor byte (identity)
+DosToScrChar:
+	RET
+
+; A: screen/editor byte -> DOS file byte (identity)
+ScrToDosChar:
+	RET
+
+DosToScrTbl:
+	DB #C0,#C1,#C2,#C3,#C4,#C5,#C6,#C7,#C8,#C9,#CA,#CB,#CC,#CD,#CE,#CF
+	DB #D0,#D1,#D2,#D3,#D4,#D5,#D6,#D7,#D8,#D9,#DA,#DB,#DC,#DD,#DE,#DF
+	DB #E0,#E1,#E2,#E3,#E4,#E5,#E6,#E7,#E8,#E9,#EA,#EB,#EC,#ED,#EE,#EF
+	DB #B0,#B1,#B2,#B3,#B4,#B5,#B6,#B7,#B8,#B9,#BA,#BB,#BC,#BD,#BE,#BF
+	DB #C0,#C1,#C2,#C3,#C4,#C5,#C6,#C7,#C8,#C9,#CA,#CB,#CC,#CD,#CE,#CF
+	DB #D0,#D1,#D2,#D3,#D4,#D5,#D6,#D7,#D8,#D9,#DA,#DB,#DC,#DD,#DE,#DF
+	DB #F0,#F1,#F2,#F3,#F4,#F5,#F6,#F7,#F8,#F9,#FA,#FB,#FC,#FD,#FE,#FF
+	DB #A8,#B8,#AA,#BA,#AF,#BF,#A1,#A2,#B0,#F9,#B7,#FB,#B9,#A4,#FE,#A0
+
+ScrToDosTbl:
+	DB #80,#81,#82,#83,#84,#85,#86,#87,#88,#89,#8A,#8B,#8C,#8D,#8E,#8F
+	DB #90,#91,#92,#93,#94,#95,#96,#97,#98,#99,#9A,#9B,#9C,#9D,#9E,#9F
+	DB #FF,#F6,#F7,#A3,#FD,#A5,#A6,#A7,#F0,#A9,#F2,#AB,#AC,#AD,#AE,#F4
+	DB #F8,#B1,#B2,#B3,#B4,#B5,#B6,#FA,#F1,#FC,#F3,#BB,#BC,#BD,#BE,#F5
+	DB #80,#81,#82,#83,#84,#85,#86,#87,#88,#89,#8A,#8B,#8C,#8D,#8E,#8F
+	DB #90,#91,#92,#93,#94,#95,#96,#97,#98,#99,#9A,#9B,#9C,#9D,#9E,#9F
+	DB #A0,#A1,#A2,#A3,#A4,#A5,#A6,#A7,#A8,#A9,#AA,#AB,#AC,#AD,#AE,#AF
+	DB #E0,#E1,#E2,#E3,#E4,#E5,#E6,#E7,#E8,#E9,#EA,#EB,#EC,#ED,#EE,#EF
 ;[]===========================================================[]
 ; Procedure write block text
 ; On:

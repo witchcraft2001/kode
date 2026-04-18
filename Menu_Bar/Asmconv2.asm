@@ -11,7 +11,7 @@ ConvSyntax:
 	LD	(IY+#02),C
 	LD	(IY+#03),C
 	LD	(IY+#04),C
-	LD	DE,#3B20
+	LD	DE,#FF20
 	SET	0,(IY+#01)
 ; Examination label (len)
 SynCon1	LD	A,(HL)
@@ -1705,8 +1705,6 @@ CmpcLp1	LD	A,(HL)
 	OR	A
 	JR	Z,CmpcNx1
 	INC	L
-	CP	";"
-	JR	Z,CmpcCmp
 	INC	C
 	CP	#20
 	JR	Z,CmpcLp1
