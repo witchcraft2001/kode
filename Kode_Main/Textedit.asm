@@ -1180,98 +1180,29 @@ _Del_	LD	H, high TextBuff
 	LD	(IY-#01),A
 	RET 
 PlusStr	LD	HL,(BegString)
-	LD	A,(HL)
-	LD	C,A
+	LD	C,(HL)
 	LD	B,#00
-	ADD	HL,BC		; HL -> next line record
+	ADD	HL,BC		; HL -> next line
 	LD	A,(HL)
 	OR	A
 	RET	Z		; no next line
-	LD	(PlsNextLen),A
-	PUSH	HL
-	POP	IX
-	LD	HL,ReCompBuff
-	CALL	ReCompile	; next line -> ReCompBuff
-	LD	A,(IX+#00)
-	CP	#03
-	JR	NC,PlsLen0
-	XOR	A
-	JR	PlsLen1
-PlsLen0:	SUB	#03
-PlsLen1:	LD	D,A		; next payload len
-	LD	A,(IY+#02)
-	LD	E,A		; current payload len
-	ADD	A,D
-	RET	C
-	CP	241
-	RET	NC
-	LD	(IY+#02),A	; merged payload len
-	LD	A,D
-	ADD	A,A
-	LD	C,A
-	LD	A,#00
-	ADC	A,A
-	LD	B,A
-	OR	C
-	JR	Z,PlsMrg1
-	LD	HL,ReCompBuff
-	LD	D, high TextBuff
-	LD	A,E
-	ADD	A,A
-	LD	E,A
-	JR	NC,$+3
-	INC	D
-	LDIR			; append next payload to TextBuff
-PlsMrg1:
-	CALL	OnlySyntax
-	CALL	PutString		; store merged current line record
-	LD	HL,(BegString)
-	LD	A,(HL)
-	LD	C,A
-	LD	B,#00
-	ADD	HL,BC		; HL = dst (start of old next line)
-	PUSH	HL
-	LD	A,(PlsNextLen)
-	LD	C,A
-	LD	B,#00
-	ADD	HL,BC		; HL = src (after old next line)
-	PUSH	HL
-	LD	DE,(EndText)
-	EX	DE,HL		; HL=end, DE=src
+	LD	A,(ReadyStr)	; save current edited line first
 	OR	A
-	SBC	HL,DE		; HL=count
-	LD	B,H
-	LD	C,L
-	POP	HL		; HL=src
-	POP	DE		; DE=dst
-	LD	A,B
-	OR	C
-	JR	Z,PlsMrg2
-	LDIR
-PlsMrg2:
-	LD	HL,(EndText)
-	LD	A,(PlsNextLen)
-	LD	C,A
-	LD	B,#00
-	OR	A
-	SBC	HL,BC
-	LD	(EndText),HL
-	XOR	A
-	LD	(HL),A
-	CALL	PrintPage
-	SUB	A
+	JR	NZ,PlsSv0
+	INC	A
 	LD	(ReadyStr),A
-	LD	(ReadyFile),A
-	LD	A,(IY+#07)
-	LD	(IY-#02),A
-	LD	A,(IY+#00)
+	CALL	PutString
+PlsSv0:
+	LD	(BegString),HL	; make next line current
+	XOR	A
+	LD	(IY+#00),A	; x=0, y unchanged
 	LD	(IY-#01),A
-	LD	HL,(EquipLn)
-	DEC	HL
-	LD	(EquipLn),HL
-	CALL	PrintInfo
-	JP	TestEnd
-PlsNextLen:	DEFB	#00
+	LD	HL,(CurLine)
+	INC	HL
+	LD	(CurLine),HL
+	INC	(IY+#01)
+	CALL	ReCompileStr	; load next line into TextBuff
+	JP	CursUpD		; merge via stable backspace path
 ;[]===========================================================[]
 HomeStr	LD	A,(IY+#00)
 	ADD	A,(IY+#07)

@@ -342,10 +342,7 @@ textpg2	LD	A,#00		; 2 page text
 PlainCompTxtStr:
 	LD	IX,CompBuff
 	LD	(IX+#01),#02
-	BIT	0,(IY-#04)
-	JR	Z,PlnCmp0
-	SET	6,(IX+#01)
-PlnCmp0:
+
 	LD	HL,ReCompBuff
 	LD	DE,CompBuff+2
 	LD	B,#00

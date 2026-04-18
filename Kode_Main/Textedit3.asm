@@ -1428,11 +1428,15 @@ ExStrNx:	LD	A,E
 
 CompileStr:
 	LD	IX,CompBuff
-	LD	(IX+#01),#02
-	BIT	0,(IY-#04)
-	JR	Z,CmpStr0
-	SET	6,(IX+#01)
-CmpStr0:
+	LD	A,#02
+	LD	HL,(BegString)
+	INC	HL
+	LD	B,(HL)
+	LD	A,B
+	AND	#40		; preserve mark bit
+	OR	#02
+	LD	(IX+#01),A
+
 	LD	HL,TextBuff
 	LD	DE,CompBuff+2
 	LD	A,(IY+#02)
@@ -1458,6 +1462,13 @@ CmpStrEnd:
 ReCompile:
 	PUSH	HL
 	POP	DE
+	LD	A,(ColTxtWin)
+	LD	(ReCmpFillCol+1),A
+	BIT	6,(IX+#01)
+	JR	Z,ReCmpCol0
+	LD	A,(ColSelTxt)
+ReCmpCol0:
+	LD	(ReCmpCol+1),A
 	LD	A,(IX+#00)
 	CP	#03
 	JR	NC,ReCmpA0
@@ -1477,7 +1488,7 @@ ReCmpALp:
 	LD	A,(HL)
 	LD	(DE),A
 	INC	DE
-	LD	A,(ColTxtWin)
+ReCmpCol	LD	A,#00
 	LD	(DE),A
 	INC	DE
 	INC	HL
@@ -1487,7 +1498,7 @@ ReCmpAEnd:
 	XOR	A
 	LD	(DE),A
 	INC	DE
-	LD	A,(ColTxtWin)
+	LD	A,(ReCmpFillCol+1)
 	LD	(DE),A
 	INC	DE
 	LD	A,#F1
@@ -1498,7 +1509,8 @@ ReCmpFill:
 	XOR	A
 	LD	(DE),A
 	INC	DE
-	LD	A,(ColTxtWin)
+ReCmpFillCol:
+	LD	A,#00
 	LD	(DE),A
 	INC	DE
 	DJNZ	ReCmpFill

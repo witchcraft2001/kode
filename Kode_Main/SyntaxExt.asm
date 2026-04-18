@@ -21,8 +21,11 @@ SynSetupLineColors:
 	LD	A,(CSLabel)
 	LD	(TmpColL),A
 	LD	A,(ColTxtWin)
-	BIT	0,(IY-#04)
+	LD	HL,(BegString)
+	INC	HL
+	BIT	6,(HL)
 	JR	Z,SynSLC0
+SynSLSel:
 	LD	A,(ColSelTxt)
 	LD	(TmpColC),A
 	LD	(TmpColM),A
