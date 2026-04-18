@@ -1,0 +1,63 @@
+;[]=======================================================================[]
+;
+;       File list for SprinterTASM source release
+;
+;       Enin Anton  CopyRight (c) 1999
+;
+;[]=======================================================================[]
+
+TasmEXE         ; EXE loader for TASM
+Prepare         ; setup and initialization routines
+TasmMain        ; main file
+
+KeybDrv         ; keyboard driver
+ScanTabl        ; ScanCode table
+ScanTabl2       ;
+MouseDrv        ; mouse driver
+
+MainUNIT        ; main module (entry = start)
+
+MenuBar         ; menu handling
+DeskTop         ; desktop handling
+DeskTop2        ;
+StatusLn        ; status line handling
+ConText         ; context text for status line
+Windows         ; window handling
+
+TextEdit        ; text editor
+TextEdit2       ;
+TextEdit3       ;
+Syntaxis        ; syntax highlighting handler
+TAstring        ; text strings
+
+Function        ; file and editor functions
+Function2       ;
+Function3       ;
+
+ASMconv         ; TAS conversion to/from text
+ASMconv2        ;
+ASMconv3        ;
+
+ASM2PASS        ; assembler pass routines
+ASM2PASS2       ;
+ASM2PASS3       ;
+
+DialogWn        ; dialog windows handler (main)
+DialogWn1       ;
+DialogWn2       ;
+DialogWn3       ;
+DialogWn4       ;
+DialogWn5       ;
+DialogWn6       ;
+Dwindows        ; dialog window resources
+
+AsmSetup        ; INI/setup file handling
+
+;[]=======================================================================[]
+
+Command         ; Z80 command table
+
+Compiler1       ; compiler module 1
+Compiler2       ; compiler module 2
+
+files           txt     ; this file

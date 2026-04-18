@@ -1,0 +1,14 @@
+_mCollectInfo_begin MACRO
+ENDM
+
+_mCollectInfo_end MACRO
+ENDM
+
+_mCollectInfo_addStart MACRO
+ENDM
+
+_mCollectInfo_addEnd MACRO
+ENDM
+
+_mSIZE_INFO MACRO _a, _b, _c, _d, _e
+ENDM
