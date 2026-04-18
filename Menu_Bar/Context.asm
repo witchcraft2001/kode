@@ -350,7 +350,7 @@ sl27:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB #FF
 sl28:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Get help about"
-	DEFB " Turbo Assembler version"
+	DEFB " Kode version"
 	DEFB #FF
 sl29:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Find matching character group in text",#FF
@@ -414,9 +414,9 @@ sl45:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 sl46:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Text editing mode",#FF
 sl47:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," Tab size for assembler labels",#FF
+	DEFB Txt,#B3," Tab size for Kode labels",#FF
 sl48:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," Tab size for assembler commands",#FF
+	DEFB Txt,#B3," Tab size for Kode commands",#FF
 sl49:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Search similar symbol string only in label field",#FF
 sl4A:	DEFB cmHelpBox,"~F1~ Help",0,#3B

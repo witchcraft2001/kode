@@ -1,6 +1,6 @@
  _mCollectInfo_addStart
 ;
- MODULE TASM_PREPARE
+ MODULE KODE_PREPARE
 
 	; Ifndef _includedsp2000
 	; Include 'shared_includes/constants/sp2000.inc'
@@ -183,7 +183,7 @@ PALETTE:	DZ	#00, #00, #00
 		DZ	#FC, #FC, #FC
 
 
-STRING:	DZ	'Turbo Assembler v ',_progVERSION,', Sprinter Team, ',_luaBUILD_DATEfull
+STRING:	DZ	'Kode v ',_progVERSION,', Sprinter Team, ',_luaBUILD_DATEfull
 
  ENDMODULE
 ;

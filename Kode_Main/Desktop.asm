@@ -543,7 +543,7 @@ FreeWin	DEFS	15,0		 ; Free windows
 ; Name for commands -New- (0-)
 Noname	DEFB	"NONAME.TXT",0
 
-FHeader	DEFB	"TASMv0.70",0
+FHeader	DEFB	"KODEv0.70",0
 	DEFW	#0000	;Temp ceil
 	DEFB	#00
 	DEFB	0,0,0	; Estring,tempadd,tempx

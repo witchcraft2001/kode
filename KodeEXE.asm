@@ -3,15 +3,15 @@
 ;                    Text Editor for Sprinter
 ; ================================================================
 ;
-; Based on original Turbo Assembler source tree
-; with assembler-specific features removed
+; Based on original Kode source tree
+; with IDE-specific features removed
 ;
 ; ================================================================
 ;
 
 ;[]================================================================================[]
 ;
-; Turbo assembler v0.70
+; Kode v0.70
 ; Last version 0.70 by enin anton in 29.03.99,
 ; Next version by anatoliy belyanskiy, sprinter team, 2023
 ;
@@ -31,13 +31,13 @@
 
  DEFINE SAVE_BIN 0                                                    ; Without for getting labels
  DEFINE COLLECT_INFO 1
-	INCLUDE 'TASM_BIN.asm'
+	INCLUDE 'KODE_BIN.asm'
 ;-------------------------------------------------;
 
 ;-------------------------------------------------;
 	ORG 0
  OUTPUT 'build/KODE.EXE'
-	DISP TasmEXE.ORG-exe_header.Size
+	DISP KodeEXE.ORG-exe_header.Size
 exe_header equ $
  BYTE	'EXE'				; 0-3 EXE
  BYTE	0				; 4 version of exe file
@@ -46,7 +46,7 @@ exe_header equ $
  WORD	0,0,0				; 11-16 reserved
  WORD	exeLoader.Start			; 17-18 in memory (#4100-#FFFF)
  WORD	exeLoader.Start			; 19-20 in memory with (Reg. PC)
- WORD	TasmEXE.stackPoint			; 21-22 (Reg. SP)
+ WORD	KodeEXE.stackPoint			; 21-22 (Reg. SP)
  BLOCK	10,' '				; 23-XXX for in HEX
  BYTE	'Kode Editor     '	
  BYTE	'     v ',_progVERSION,'     '
@@ -82,9 +82,9 @@ exeLoader.Start:
 	RST	ToBIOS					; Pages
 
 
-	LD	A,(ModulesPages.TasmMain1)			; Enable.with #4000
+	LD	A,(ModulesPages.KodeMain1)			; Enable.with #4000
 	OUT	(SLOT2),A
-	LD	A,(ModulesPages.TasmMain2)			; Enable.with #8000
+	LD	A,(ModulesPages.KodeMain2)			; Enable.with #8000
 	OUT	(SLOT3),A
 
 ; !TODO on size, not
@@ -103,12 +103,12 @@ exeLoader.Start:
 	CALL	#9000	; !HARDCODE mem map; Prepare
 
 ;
-; 2 - TasmMain (2 pages)
+; 2 - KodeMain (2 pages)
 	LD	HL,#C100	; !HARDCODE
-	LD	DE,HSTsize.TasmMain				; Internal operation
+	LD	DE,HSTsize.KodeMain				; Internal operation
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
-	RST	ToDSS					; Block TasmMain
+	RST	ToDSS					; Block KodeMain
 	JP	C,No_Space				; CY - none memory
 	
 	LD	HL,#C100	; !HARDCODE; block
@@ -268,9 +268,9 @@ NoSetup:	IN	A,(SLOT0)
 	LD	C,Dss.ChDisk
 	RST	ToDSS
 
-	LD	A,(ModulesPages.TasmMain1)
+	LD	A,(ModulesPages.KodeMain1)
 	OUT	(SLOT0),A
-	LD	A,(ModulesPages.TasmMain2)
+	LD	A,(ModulesPages.KodeMain2)
 	OUT	(SLOT3),A
 	POP	AF
 	LD	(DOSpage),A
@@ -294,9 +294,9 @@ NoSetup:	IN	A,(SLOT0)
 ;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-	LD	HL,FILLend_TasmMain
-	LD	DE,FILLend_TasmMain+1
-	LD	BC,#FFFF-FILLend_TasmMain
+	LD	HL,FILLend_KodeMain
+	LD	DE,FILLend_KodeMain+1
+	LD	BC,#FFFF-FILLend_KodeMain
 	LD	(HL),A
 	LDIR 						; !FIXIT
 	
@@ -325,8 +325,8 @@ Fhandle:		BYTE	#00
 
 ;
 ModulesPages:
-.TasmMain1:	BYTE	#00
-.TasmMain2:	BYTE	#00
+.KodeMain1:	BYTE	#00
+.KodeMain2:	BYTE	#00
 .Dialogwn1:	BYTE	#00
 .Dialogwn2:	BYTE	#00
 .Menubar1:	BYTE	#00
@@ -342,7 +342,7 @@ MoveP:	DI
 	LD	SP,#F6FF					; !hardcode mem map
 	IN	A,(SLOT3)
 	OUT	(SLOT1),A
-	CALL	TasmStart
+	CALL	KodeStart
 
 
 ;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -406,8 +406,8 @@ HSTsize:
 
 ;
  DISP 0
-	INCBIN 'build/bin/HRUST/TasmMain.hst'
-.TasmMain EQU $
+	INCBIN 'build/bin/HRUST/KodeMain.hst'
+.KodeMain EQU $
  ENT
 ;
 
@@ -442,7 +442,7 @@ HSTsize:
 
 ;
 	DISPLAY "Prepare	size: ",/A,HSTsize.Prepare
-	DISPLAY "TasmMain	size: ",/A,HSTsize.TasmMain
+	DISPLAY "KodeMain	size: ",/A,HSTsize.KodeMain
 	DISPLAY "DialogWN	size: ",/A,HSTsize.DialogWN
 	DISPLAY "MenuBar	size: ",/A,HSTsize.MenuBar
 	DISPLAY "Command	size: ",/A,HSTsize.Command

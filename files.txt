@@ -1,14 +1,14 @@
 ;[]=======================================================================[]
 ;
-;       File list for SprinterTASM source release
+;       File list for SprinterKODE source release
 ;
 ;       Enin Anton  CopyRight (c) 1999
 ;
 ;[]=======================================================================[]
 
-TasmEXE         ; EXE loader for TASM
+KodeEXE         ; EXE loader for KODE
 Prepare         ; setup and initialization routines
-TasmMain        ; main file
+KodeMain        ; main file
 
 KeybDrv         ; keyboard driver
 ScanTabl        ; ScanCode table

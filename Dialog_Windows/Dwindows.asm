@@ -525,7 +525,7 @@ DaboutV:; Defw #0819
 
 	DEFB	TextLine
 	BYTE	4,2			; Window: number, number
-	DEFB	'TURBO ASSEMBLER v ',_progVERSION,0
+	DEFB	'KODE v ',_progVERSION,0
 	DEFB	TextLine
 	BYTE	13,3
 	DEFB	"by:",0

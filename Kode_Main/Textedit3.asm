@@ -1295,7 +1295,7 @@ SaveProec:
 	POP	HL
 	RET 
 
-; Assembler syntaxis routine
+; Kode syntaxis routine
 Syntax:	LD	HL,PrintS
 	PUSH	HL
 

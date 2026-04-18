@@ -18,8 +18,8 @@
 
 
 	 -- build packed MAIN and run a dry pass for Set_Pictures.asm
-		if (os.execute("sjasmplus -Wall --msg=war --nologo --syntax=w --fullpath --lst=Build/Prebuilds.LST TASM_BIN.ASM")) then
-				print("--[     TASM_Build.asm Prebuild DONE     ]--")
+		if (os.execute("sjasmplus -Wall --msg=war --nologo --syntax=w --fullpath --lst=Build/Prebuilds.LST KODE_BIN.ASM")) then
+				print("--[     KODE_Build.asm Prebuild DONE     ]--")
 			if (os.execute(pack_prog)) then
 				print("--[     Hrusting MAIN.BIN DONE     ]--")
 				print(" ")
@@ -28,7 +28,7 @@
 				os.exit(1)
 			end	
 		else
-			print("--[     TASM_Build.asm Prebuild ERROR!!!     ]--")
+			print("--[     KODE_Build.asm Prebuild ERROR!!!     ]--")
 			os.exit(1)
 		end
 	ENDLUA
@@ -97,7 +97,7 @@
  DEFINE _pathPACKfile 	'Build/HST'
  DEFINE _pathBINfile	'Build/Bin/New'
 ;
- DEFINE _fileTasmMain	'_TasmMain.bin'
+ DEFINE _fileKodeMain	'_KodeMain.bin'
  DEFINE _fileDialogWindows	'_DialogWN.bin'
  DEFINE _fileMenuBar	'_MenuBar.bin'
  DEFINE _fileCommand	'_Command.bin'
@@ -106,7 +106,7 @@
 
 
  DEFINE _fnamePrepare	'build/bin/Prepare.bin'
- DEFINE _fnameTasmMain	'build/bin/TasmMain.bin'
+ DEFINE _fnameKodeMain	'build/bin/KodeMain.bin'
  DEFINE _fnameDialogWindows	'build/bin/DialogWN.bin'
  DEFINE _fnameMenuBar	'build/bin/MenuBar.bin'
  DEFINE _fnameCommand	'build/bin/Command.bin'
@@ -114,18 +114,18 @@
 
 /*
 	mGETosNAME '_OSname'
-	mGETfullNAME '_fnameTasmMain', _pathBINfile, _fileTasmMain, _OSname
+	mGETfullNAME '_fnameKodeMain', _pathBINfile, _fileKodeMain, _OSname
 	
-  DISPLAY _fnameTasmMain
+  DISPLAY _fnameKodeMain
   DISPLAY _OSname
 */
 
-; ----------------------------------------------------------[tasm main]
-	ORG TasmMain.ORG
+; ----------------------------------------------------------[kode main]
+	ORG KodeMain.ORG
          _mCollectInfo_begin
- IF SAVE_BIN : OUTPUT _fnameTasmMain : ENDIF
-	include 'Tasm_Main/Tasm_Main.asm'
-	_mSIZE_INFO <"TasmMain:">, TasmMain.ORG, $, 2, 1
+ IF SAVE_BIN : OUTPUT _fnameKodeMain : ENDIF
+	include 'Kode_Main/Kode_Main.asm'
+	_mSIZE_INFO <"KodeMain:">, KodeMain.ORG, $, 2, 1
  IF SAVE_BIN : OUTEND : ENDIF
 ;--------------------------------------------------------------------;
 

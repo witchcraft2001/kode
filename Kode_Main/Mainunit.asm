@@ -44,7 +44,7 @@ evCombKey       EQU #03	; Pressed
 evCommand       EQU #04	; Commands
 evMessage       EQU #05	; Internal operation
 ;[]===========================================================[]
-; Commands assembler ()
+; Commands Kode ()
 cmNew           EQU #00
 cmOpen          EQU #01
 cmSave          EQU #02
@@ -115,8 +115,8 @@ msNewList       EQU #85
 msNewColor	EQU #86
 msNewTest       EQU #87
 ;[]===========================================================[]
-; Assembler
-TasmStart: DI 
+; Kode
+KodeStart: DI 
 	LD	(SaveStk+1),SP
 	LD	SP,#7FFF	;Begin machine stack
 	LD	IY,IYpoint
@@ -171,7 +171,7 @@ Cobject+1: LD	A,#00
 	JR	ObjLoop
 /*
 ; []===========================================================[] ; !fixit )))
-	BYTE	' - Turbo Assembler v ',_progVERSION,' - '
+	BYTE	' - Kode v ',_progVERSION,' - '
 	BYTE	' Last issue ',_luaBUILD_DATEfull,' '
 	BYTE	' Programmed by Anton Enin '
 	BYTE	' All rights reserved. Sprinter Team '
@@ -259,7 +259,7 @@ SaveStk:	LD	SP,#0000
  ENDIF
 	RET 
 ;[]===========================================================[]
-; Memory for assembler:
+; Memory for Kode:
 ; 81920 for image. from under text.windows
 ; 32768 ClipBoard
 ; 32768 for
@@ -494,7 +494,7 @@ GetCmnd:	PUSH	DE
 	OR	A
 	RET 
 ;[]===========================================================[]
-; Table commands assembler
+; Table commands Kode
 ; Format table:
 ; +00 - 0 command not
 ; 1 command

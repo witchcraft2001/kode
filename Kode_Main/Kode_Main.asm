@@ -1,13 +1,13 @@
  _mCollectInfo_addStart
 ;
 ;[]================================================================================[]
-; Main block assembler located: #0000 - #79FF
+; Main block Kode located: #0000 - #79FF
 ; Buffers editor: #7A00 - #7F1F
 ; Machine stack: #7F20 - #7FFF
 ; Text pages: #8000 - #FFFF (32kb)
 ;[]================================================================================[]
 
-; Turbo assembler bios from #0000
+; Kode BIOS from #0000
 
 	IFNDEF NEW_VERSION : DEFINE NEW_VERSION 1 : ENDIF
 	IF NEW_VERSION : DEFINE NEW_ADDR #4000 : ELSE : DEFINE NEW_ADDR 0 : ENDIF
@@ -347,7 +347,7 @@ ResCurs	LD	A,(CurFlag)
 	INCLUDE	'Function2.asm'
 	INCLUDE	'Function3.asm'
 	INCLUDE	'ASMconv.asm'
-FILLend_TasmMain	EQU $
+FILLend_KodeMain	EQU $
 ;---------------------------------------------------------------------/*/
  ; !fixit
 	; Include "asm2pass.z80",#18
