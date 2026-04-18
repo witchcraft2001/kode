@@ -557,7 +557,7 @@ CmndTable:
 	BYTE	#00			; Command run
 	WORD	.ret
 
-	BYTE	#01			; Command parameters
+	BYTE	#00			; Command parameters
 	WORD	.ret
 
 	BYTE	#00			; Command compile
@@ -566,19 +566,19 @@ CmndTable:
 	BYTE	#00			; Command make
 	WORD	.ret
 
-	BYTE	#01			; Command primary file
+	BYTE	#00			; Command primary file
 	WORD	.ret
 
-	BYTE	#01			; Command clear primary file
+	BYTE	#00			; Command clear primary file
 	WORD	.ret
 
-	BYTE	#01			; Command information
+	BYTE	#00			; Command information
 	WORD	.ret
 
 	BYTE	#00			; Command symbol list
 	WORD	.ret
 
-	BYTE	#01			; Command quit debugger
+	BYTE	#00			; Command quit debugger
 	WORD	.ret
 
 	BYTE	#01			; Command editor
