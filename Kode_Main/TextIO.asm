@@ -65,25 +65,7 @@ connmok	SRL	A		; Internal operation
 connmno	LDIR			; Copy
 	POP	AF
 	OUT	(SLOT2),A
-	LD	E,L
-	LD	D,H
-	LD	B,#04
-ext1	DEC	HL
-	LD	A,(HL)
-	CP	"."
-	JR	Z,extf
-	DJNZ	ext1
-	EX	DE,HL
-	DEC	HL
-extf	INC	HL
-	LD	(HL),"T"	; Set s TAS
-	INC	HL
-	LD	(HL),"X"
-	INC	HL
-	LD	(HL),"T"
-	INC	HL
-	SUB	A		; Header
-	LD	(HL),A
+	SUB	A		; Header flag for InitWin
 	CALL	InitWin		; Descriptor new window
 	LD	HL,FileName	; Name
 	CALL	InitNam		; Place name window in.names
@@ -613,10 +595,18 @@ CurrBytes
 	DEFS	4,0	; Current.offset in file
 CurFPoint
 	DEFS	4,0	; Current FilePointer
+SaveCurX
+	DEFB	0
+SaveAddX
+	DEFB	0
 ;[]===========================================================[]
 ; Procedure conversion TAS in file
 ;[]===========================================================[]
 ExportTXT
+	LD	A,(IY+#00)	; Preserve cursor X
+	LD	(SaveCurX),A
+	LD	A,(IY+#07)	; Preserve horizontal offset
+	LD	(SaveAddX),A
 	LD	IX,TxtWtab	; Table window descriptors
 	CALL	OnlySyntax	; Syntax-highlight last line
 	CALL	PutString	; Insert it in text
@@ -716,8 +706,12 @@ ConATex	CALL	ResCurs		; Disable cursor
 	LD	A,(IX+#1E)
 	OUT	(SLOT3),A
 	CALL	SetNewName	; New name window
-	CALL	ReCompileStr	; Current.line
-	CALL	OnlySyntax	; Syntax-highlight it without printing
+	LD	A,(SaveCurX)
+	LD	(IY+#00),A
+	LD	(IY-#01),A
+	LD	A,(SaveAddX)
+	LD	(IY+#07),A
+	LD	(IY-#02),A
 	LD	(IY+#17),#01	; Readyfile
 	CALL	SetCurs		; Enable.cursor
 	CALL	PrintInfo+4

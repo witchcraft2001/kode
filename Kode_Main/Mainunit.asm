@@ -143,6 +143,9 @@ KodeStart: DI
 	RST	#00
 
 	CALL	InitSetup
+	LD	A,#04
+	LD	(LabSize),A
+	LD	(TabSize),A
 	CALL	InitEvent	;Initialize event
 	CALL	InitBar		; Initialize menu bar
 	CALL	InitDeskTop	; Initialize desk top

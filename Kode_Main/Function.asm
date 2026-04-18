@@ -320,6 +320,8 @@ UnknownF
 ; Function - Save
 
 SaveFile
+	SUB	A
+	LD	(FMenuFlg),A	; Normal save mode
 	LD	IX,TxtWtab		
 	IN	A,(SLOT2)
 	LD	C,A
@@ -346,7 +348,6 @@ SaveFl1	INC	HL
 	LD	(DE),A
 SaveF11	LD	A,C
 	OUT	(SLOT2),A
-	JP	NZ,SaveFileAs	
 	LD	HL,FileName
 	LD	DE,Noname		
 	LD	B,#0B
@@ -458,6 +459,8 @@ SaveFileAs
 	LD	(FMenuFlg),A
 	LD	HL,DsaveFl
 	CALL	DialogW
+	SUB	A
+	LD	(FMenuFlg),A	; Leave save-as mode after dialog
 	LD	HL,what			
 	LD	A,(HL)
 	INC	HL
@@ -496,212 +499,33 @@ SaveFlN	LD	IX,TxtWtab	; Table window descriptors
 	OUT	(SLOT0),A			; Restore 0 page
 	POP	IY				; Restore.register
 	EX	AF,AF'
-	LD	DE,SetNewName
-	PUSH	DE
-	JP	C,SaveTAS		; File not
-	LD	IX,SaveTAS
-OvrwrtD	IN	A,(SLOT2)
-	PUSH	AF
-	LD	A,(DialogPg1)
-	OUT	(SLOT2),A
-	LD	DE,FLName
-	PUSH	DE
-	LD	A,#20
-	LD	B,28
-	LD	(DE),A
-	INC	DE
-	DJNZ	$-2
-	POP	DE
-	DEC	B
-	LD	HL,FileName
-	PUSH	HL
-	INC	B
-	LD	A,(HL)
-	INC	HL
-	OR	A
-	JR	NZ,$-4
-	LD	A,27
-	SUB	13
-	SUB	B
-	SRL	A
-	ADD	A,E
-	LD	E,A
-	JR	NC,$+3
-	INC	D
-	LD	A,B
-	LD	HL,TmpFLN
-	LD	BC,#0005
-	LDIR 
-	LD	C,A
-	LD	A,"'"
-	LD	(DE),A
-	INC	DE
-	POP	HL
-	LDIR 
-	LD	(DE),A
-	INC	DE
-	LD	HL,TmpFLN+5
-	LD	C,#08
-	LDIR 
-	POP	AF
-	OUT	(SLOT2),A
-	LD	HL,Dexists
-	PUSH	IX
-	CALL	DialogW
-	POP	IX
-	POP	DE
-	LD	HL,what
-	LD	A,(HL)
-	INC	HL
-	CP	evCommand
-	RET	NZ
-	LD	A,(HL)
-	CP	cmYes
-	RET	NZ
-	PUSH	DE
-	JP	(IX)
+	JP	SaveTAS
 
-; TAS in TXT file
-ExportFile
-	LD	IX,TxtWtab		; Table window descriptors
-	LD	A,(IX+#1D)		; 1 text page
-	OUT	(SLOT2),A
-	LD	A,(IX+#1E)		; 2 text page
-	OUT	(SLOT3),A
-	LD	HL,FileName-1
-	INC	HL
-	LD	A,(HL)
-	OR	A
-	JR	NZ,$-3
-	LD	E,L
-	LD	D,H
-	LD	B,#04
-ext11	DEC	HL
-	LD	A,(HL)
-	CP	"."
-	JR	Z,extf1
-	DJNZ	ext11
-	EX	DE,HL
-	DEC	HL
-extf1	INC	HL
-	LD	(HL),"T"		; Set ASM
-	INC	HL
-	LD	(HL),"X"
-	INC	HL
-	LD	(HL),"T"
-	INC	HL
-	LD	(HL),#00
-	PUSH	IY
-	IN	A,(SLOT0)
-	PUSH	AF
-	LD	A,(DOSpage)		; Enable system DOS
-	OUT	(SLOT0),A			; In 0 page
-	LD	BC,#7FFD														; !fixit #7ffd
-	LD	A,#10			; Enable. ports vg93
-	OUT	(C),A
-	LD	HL,FileName		; Internal operation
-	LD	DE,ReCompBuff	; Internal operation
-	LD	A,#21			; Internal operation
-	LD	C,#19			; Function DOS: F_First
-	RST	#10
-	EX	AF,AF'
-	LD	BC,#7FFD														; !fixit #7ffd
-	SUB	A				; Disable. ports vg93
-	OUT	(C),A
-	POP	AF
-	OUT	(SLOT0),A			; Restore 0 page
-	POP	IY				; Restore.register
-	EX	AF,AF'
-	JP	C,ExportTXT	; File not
-	LD	IX,ExportTXT
-	JP	OvrwrtD
-;[]===========================================================[]
-; Procedure write new name window
 SetNewName
-	LD	IX,TxtWtab
+	LD	IX,TxtWtab		; Current window descriptor
 	IN	A,(SLOT2)
 	PUSH	AF
 	LD	A,(DialogPg1)
 	OUT	(SLOT2),A
-	LD	A,(IX+#00)		; Number window
+	LD	A,(IX+#00)		; Window number
 	AND	#0F
 	INC	A
 	LD	B,A
 	LD	HL,NameTab-#80
 	LD	DE,#0080
-	ADD	HL,DE			; Buffers for name
+	ADD	HL,DE			; Current window name slot
 	DJNZ	$-1
-	LD	(HL),D			; Delete current. name
+	LD	DE,FileName
+SNcopy	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	INC	HL
+	OR	A
+	JR	NZ,SNcopy
 	POP	AF
 	OUT	(SLOT2),A
-	PUSH	IY
-	IN	A,(SLOT0)			; Enable. DOS
-	PUSH	AF
-	LD	A,(DOSpage)
-	OUT	(SLOT0),A
-	LD	BC,#7FFD														; !fixit #7ffd
-	LD	A,#10
-	OUT	(C),A			; Enable. vg93
-	LD	C,#02			; Function DOS: CURDISK
-	RST	#10
-	LD	HL,ReCompBuff
-	ADD	A,"A"
-	LD	(HL),A
-	INC	HL
-	LD	(HL),":"
-	INC	HL
-	LD	C,#1E
-	RST	#10
-	LD	BC,#7FFD														; !fixit #7ffd
-	SUB	A
-	OUT	(C),A
-	POP	AF
-	OUT	(SLOT0),A
-	POP	IY
-	LD	HL,FileName		; Name with its
-	LD	DE,ReCompBuff	; Internal operation
-	PUSH	DE
-	INC	DE
-	LD	A,(DE)
-	OR	A
-	JR	NZ,$-3
-	DEC	DE
-	LD	A,(DE)
-	CP	'\' 
-	JR	Z,$+6
-	INC	DE
-	LD	A,'\' 
-	LD	(DE),A
-	INC	DE
-	LD	A,(HL)
-	LD	(DE),A
-	INC	HL
-	INC	DE
-	OR	A
-	JR	NZ,$-5
-	DEC	DE
-	LD	L,E
-	LD	H,D
-	LD	B,#04
-newf1	DEC	HL
-	LD	A,(HL)
-	CP	"."
-	JR	Z,newf2
-	DJNZ	newf1
-	EX	DE,HL
-	DEC	HL
-newf2	INC	HL
-	LD	(HL),"T"		; Set ASM
-	INC	HL
-	LD	(HL),"X"
-	INC	HL
-	LD	(HL),"T"
-	INC	HL
-	LD	(HL),#00
-	POP	HL
-	CALL	InitNam		; New name
-	CALL	SelcWin	 	; Window with
-	RET 
+	CALL	SelcWin		; Repaint selected window title
+	RET
 FMenuFlg
 	BYTE	#00			; 00 - menu open, 01 - menu save as
 FileHandle
