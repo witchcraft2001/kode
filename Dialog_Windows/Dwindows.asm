@@ -415,12 +415,12 @@ Dcolors	DEFW	#0506
 	DEFB	#FF
 
 GroupList
-	DEFB	"Desk top",#0D
-	DEFB	"Brouser",#0D
+	DEFB	"Desktop",#0D
+	DEFB	"Browser",#0D
 	DEFB	"Dialog window",#0D
 	DEFB	"Text window",#0D
 	DEFB	"Syntaxis",#0D
-	DEFB	"Miscelions",#0D
+	DEFB	"Miscellaneous",#0D
 	DEFB	0
 
 ItemTab	DEFW	ItemList1,ColList1

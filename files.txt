@@ -38,10 +38,6 @@ ASMconv         ; TAS conversion to/from text
 ASMconv2        ;
 ASMconv3        ;
 
-ASM2PASS        ; assembler pass routines
-ASM2PASS2       ;
-ASM2PASS3       ;
-
 DialogWn        ; dialog windows handler (main)
 DialogWn1       ;
 DialogWn2       ;
@@ -56,8 +52,5 @@ AsmSetup        ; INI/setup file handling
 ;[]=======================================================================[]
 
 Command         ; Z80 command table
-
-Compiler1       ; compiler module 1
-Compiler2       ; compiler module 2
 
 files           txt     ; this file

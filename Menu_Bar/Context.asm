@@ -299,7 +299,7 @@ sl19:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB #FF
 sl1A:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," View information about"
-	DEFB " kompilyatsii"
+	DEFB " compilation"
 	DEFB #FF
 sl1B:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," View symbol table"
@@ -342,7 +342,7 @@ sl25:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB #FF
 sl26:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Get help for"
-	DEFB " kompilyatoru"
+	DEFB " compiler"
 	DEFB #FF
 sl27:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Get help for"
