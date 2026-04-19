@@ -4,13 +4,46 @@
 ; No file I/O, no dynamic profile loading.
 
 SyntaxExtTry:
+	LD	HL,TextBuff
+	LD	(SynWorkBuf),HL
+	JP	SyntaxExtTryBuf
+
+SyntaxExtTryBuf:
+	LD	A,(SynRenderPass)
+	OR	A
+	JR	NZ,SynExtRender
 	CALL	SynSetupLineColors
 	CALL	SynDetectLang
 	LD	(SynLang),A
 	OR	A
 	RET	Z
+	XOR	A
+	LD	(SynCBlockOpen),A
+	JR	SynExtRun
+
+SynExtRender:
+	CALL	SynSetupLineColors
+	LD	A,(SynRenderLangValid)
+	OR	A
+	JR	Z,SynExtRDet
+	LD	A,(SynRenderLang)
+	LD	(SynLang),A
+	OR	A
+	RET	Z
+	JR	SynExtRun
+
+SynExtRDet:
+	CALL	SynDetectLang
+	LD	(SynLang),A
+	LD	(SynRenderLang),A
+	LD	A,#01
+	LD	(SynRenderLangValid),A
+	LD	A,(SynLang)
+	OR	A
+	RET	Z
+	JR	SynExtRun
+SynExtRun:
 	CALL	SynHighlightComments
-	CALL	SynHighlightCKeywords
 	RET
 
 SynSetupLineColors:
@@ -37,7 +70,8 @@ SynSLC0:
 	LD	A,B
 	OR	A
 	RET	Z
-	LD	HL,TextBuff+1
+	LD	HL,(SynWorkBuf)
+	INC	HL
 SynSLC1:
 	LD	(HL),C
 	INC	HL
@@ -72,55 +106,63 @@ SynDNxt:
 SynDDone:
 	LD	A,D
 	OR	E
-	JR	Z,SynDNone
+	JP	Z,SynDNone
 	LD	H,D
 	LD	L,E
 	LD	DE,SynExtC
 	CALL	SynExtEq
-	JR	Z,SynIsC
+	JP	Z,SynIsC
 	LD	DE,SynExtH
 	CALL	SynExtEq
-	JR	Z,SynIsC
+	JP	Z,SynIsC
 	LD	DE,SynExtCpp
 	CALL	SynExtEq
-	JR	Z,SynIsC
+	JP	Z,SynIsC
 	LD	DE,SynExtHpp
 	CALL	SynExtEq
-	JR	Z,SynIsC
+	JP	Z,SynIsC
 	LD	DE,SynExtBat
 	CALL	SynExtEq
-	JR	Z,SynIsBat
+	JP	Z,SynIsBat
 	LD	DE,SynExtCmd
 	CALL	SynExtEq
-	JR	Z,SynIsBat
+	JP	Z,SynIsBat
 	LD	DE,SynExtMk
 	CALL	SynExtEq
-	JR	Z,SynIsMake
+	JP	Z,SynIsMake
 	LD	DE,SynExtMak
 	CALL	SynExtEq
-	JR	Z,SynIsMake
+	JP	Z,SynIsMake
 	LD	DE,SynExtMake
 	CALL	SynExtEq
-	JR	Z,SynIsMake
+	JP	Z,SynIsMake
 	LD	DE,SynExtAsm
 	CALL	SynExtEq
-	JR	Z,SynIsAsm
+	JP	Z,SynIsAsm
 	LD	DE,SynExtZ80
 	CALL	SynExtEq
-	JR	Z,SynIsAsm
+	JP	Z,SynIsAsm
 	LD	DE,SynExtZas
 	CALL	SynExtEq
-	JR	Z,SynIsAsm
+	JP	Z,SynIsAsm
 	LD	DE,SynExtTas
 	CALL	SynExtEq
-	JR	Z,SynIsAsm
+	JP	Z,SynIsAsm
 	LD	DE,SynExtInc
 	CALL	SynExtEq
-	JR	Z,SynIsAsm
+	JP	Z,SynIsAsm
 	LD	DE,SynExtS
 	CALL	SynExtEq
-	JR	Z,SynIsAsm
+	JP	Z,SynIsAsm
 SynDNone:
+	LD	HL,SynNameBuf
+	LD	DE,SynNmMakefile
+	CALL	SynNameEqNoCase
+	JR	Z,SynIsMake
+	LD	HL,SynNameBuf
+	LD	DE,SynNmGnumake
+	CALL	SynNameEqNoCase
+	JR	Z,SynIsMake
 	XOR	A
 	RET
 SynIsC:
@@ -158,7 +200,7 @@ SynComMake:
 
 SynComBat:
 	LD	B,(IY+#02)
-	LD	HL,TextBuff
+	LD	HL,(SynWorkBuf)
 SynBatLp:
 	LD	A,B
 	OR	A
@@ -196,8 +238,20 @@ SynBatPaint:
 	RET
 
 SynComC:
+	LD	A,(SynCBlockOpen)
+	OR	A
+	JR	Z,SynComCScan
+	LD	HL,(SynWorkBuf)
 	LD	B,(IY+#02)
-	LD	HL,TextBuff
+	CALL	SynPaintToEnd
+	CALL	SynFindBlockClose
+	RET	C
+	XOR	A
+	LD	(SynCBlockOpen),A
+	RET
+SynComCScan:
+	LD	B,(IY+#02)
+	LD	HL,(SynWorkBuf)
 SynCCLp:
 	LD	A,B
 	OR	A
@@ -215,11 +269,21 @@ SynCCLp:
 	CP	'/'
 	JR	Z,SynCCMark
 	CP	'*'
-	JR	Z,SynCCMark
+	JR	Z,SynCCBlock
 	DEC	HL
 	DEC	HL
 	INC	B
 	JR	SynCCNext
+SynCCBlock:
+	DEC	HL
+	DEC	HL
+	INC	B
+	CALL	SynPaintToEnd
+	CALL	SynFindBlockClose
+	RET	NC
+	LD	A,#01
+	LD	(SynCBlockOpen),A
+	RET
 SynCCMark:
 	DEC	HL
 	DEC	HL
@@ -235,7 +299,7 @@ SynCCNext:
 SynPaintFromChar:
 	LD	C,A
 	LD	B,(IY+#02)
-	LD	HL,TextBuff
+	LD	HL,(SynWorkBuf)
 SynPFC0:
 	LD	A,B
 	OR	A
@@ -295,12 +359,30 @@ SynRemNo:
 	SCF
 	RET
 
-SynHighlightCKeywords:
-	LD	A,(SynLang)
-	CP	#01
-	RET	NZ
+SynHighlightKeywords:
+	LD	HL,SynKeywords1
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	A,(TmpColM)
+	LD	(SynKwColor),A
+	LD	HL,SynKeywords1
+	LD	(SynKwPtr),HL
+	CALL	SynHighlightKeywordsOne
+	LD	HL,SynKeywords2
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	A,(TmpColL)
+	LD	(SynKwColor),A
+	LD	HL,SynKeywords2
+	LD	(SynKwPtr),HL
+	CALL	SynHighlightKeywordsOne
+	RET
+
+SynHighlightKeywordsOne:
 	LD	B,(IY+#02)
-	LD	HL,TextBuff
+	LD	HL,(SynWorkBuf)
 SynKWLp:
 	LD	A,B
 	OR	A
@@ -321,10 +403,10 @@ SynKWLp:
 	POP	HL
 	POP	BC
 	JR	C,SynKWNext
-	LD	DE,SynCKeywords
+	LD	DE,(SynKwPtr)
 	CALL	SynWordInList
 	JR	NZ,SynKWNext
-	LD	A,(TmpColM)
+	LD	A,(SynKwColor)
 	CALL	SynColorWord
 	LD	A,(SynTokenLen)
 	LD	E,A
@@ -355,7 +437,15 @@ SynCWLp:
 	CALL	SynIsWordChar
 	JR	C,SynCWEnd
 	LD	A,(HL)
+	LD	A,(SynCaseSensitive)
+	OR	A
+	JR	NZ,SynCWNoLower
+	LD	A,(HL)
 	CALL	SynToLower
+	JR	SynCWStore
+SynCWNoLower:
+	LD	A,(HL)
+SynCWStore:
 	LD	(DE),A
 	INC	DE
 	INC	HL
@@ -408,7 +498,13 @@ SynWCmpL:
 	JR	Z,SynWNoPop
 	CP	' '
 	JR	Z,SynWNoPop
+	LD	B,A
+	LD	A,(SynCaseSensitive)
+	OR	A
+	LD	A,B
+	JR	NZ,SynWCmpKeep
 	CALL	SynToLower
+SynWCmpKeep:
 	CP	(HL)
 	JR	NZ,SynWNoPop
 	INC	DE
@@ -532,6 +628,435 @@ SynToUpper:
 	RES	5,A
 	RET
 
+SynFindBlockClose:
+	LD	B,(IY+#02)
+	LD	HL,(SynWorkBuf)
+SynFBC0:
+	LD	A,B
+	OR	A
+	SCF
+	RET	Z
+	LD	A,(HL)
+	CP	'*'
+	JR	NZ,SynFBCN
+	INC	HL
+	INC	HL
+	DEC	B
+	LD	A,B
+	OR	A
+	SCF
+	RET	Z
+	LD	A,(HL)
+	CP	'/'
+	JR	Z,SynFBCF
+	DEC	HL
+	DEC	HL
+	INC	B
+SynFBCN:
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	SynFBC0
+SynFBCF:
+	OR	A
+	RET
+
+SynSeedBlockFromTop:
+	XOR	A
+	LD	(SynCBlockOpen),A
+	CALL	SynDetectLang
+	CP	#01
+	RET	NZ
+	LD	IX,#8040
+	LD	HL,(UpLinePg)
+	LD	A,H
+	OR	L
+	RET	Z
+SynSBTLp:
+	LD	A,(IX+#00)
+	OR	A
+	RET	Z
+	PUSH	HL
+	CALL	SynScanCompLine
+	POP	HL
+	DEC	HL
+	LD	A,H
+	OR	L
+	RET	Z
+	LD	E,(IX+#00)
+	LD	D,#00
+	ADD	IX,DE
+	JR	SynSBTLp
+
+SynScanCompLine:
+	LD	A,(IX+#00)
+	CP	#03
+	RET	C
+	SUB	#03
+	LD	B,A
+	PUSH	IX
+	POP	HL
+	INC	HL
+	INC	HL
+SynSCLp:
+	LD	A,B
+	OR	A
+	RET	Z
+	LD	A,(SynCBlockOpen)
+	OR	A
+	JR	Z,SynSCOut
+	LD	A,B
+	CP	#02
+	RET	C
+	LD	A,(HL)
+	CP	'*'
+	JR	NZ,SynSCStep
+	INC	HL
+	DEC	B
+	LD	A,(HL)
+	CP	'/'
+	JR	NZ,SynSCLp
+	XOR	A
+	LD	(SynCBlockOpen),A
+	INC	HL
+	DEC	B
+	JR	SynSCLp
+
+SynSCOut:
+	LD	A,B
+	CP	#02
+	RET	C
+	LD	A,(HL)
+	CP	'/'
+	JR	NZ,SynSCStep
+	INC	HL
+	DEC	B
+	LD	A,(HL)
+	CP	'/'
+	RET	Z
+	CP	'*'
+	JR	NZ,SynSCLp
+	LD	A,#01
+	LD	(SynCBlockOpen),A
+	INC	HL
+	DEC	B
+	JR	SynSCLp
+
+SynSCStep:
+	INC	HL
+	DEC	B
+	JR	SynSCLp
+
+SynSeedBlockToCurrent:
+	XOR	A
+	LD	(SynCBlockOpen),A
+	LD	A,(SynLang)
+	CP	#01
+	RET	NZ
+	LD	IX,(AdrPage)
+	LD	DE,(BegString)
+SynSBCLp:
+	PUSH	IX
+	POP	HL
+	OR	A
+	SBC	HL,DE
+	RET	Z
+	LD	A,(IX+#00)
+	OR	A
+	RET	Z
+	CALL	SynScanCompLine
+	LD	E,(IX+#00)
+	LD	D,#00
+	ADD	IX,DE
+	JR	SynSBCLp
+
+SynEnsureProfileLoaded:
+	LD	A,(SynLang)
+	LD	B,A
+	LD	A,(SynLoadedLang)
+	CP	B
+	RET	Z
+	LD	A,B
+	LD	(SynLoadedLang),A
+	CALL	SynLoadProfileForLang
+	RET
+
+SynLoadProfileForLang:
+	LD	HL,SynKeywords1
+	XOR	A
+	LD	(HL),A
+	LD	HL,SynKeywords2
+	LD	(HL),A
+	LD	A,(SynLang)
+	CP	#01
+	JR	NZ,SynLPNoDefC
+	LD	HL,SynCKeywords
+	LD	DE,SynKeywords1
+	CALL	SynCopyCsv
+SynLPNoDefC:
+	LD	A,(SynLang)
+	CP	#01
+	JR	Z,SynLP_C
+	CP	#02
+	JR	Z,SynLP_Asm
+	CP	#03
+	JR	Z,SynLP_Bat
+	CP	#04
+	JR	Z,SynLP_Make
+	RET
+SynLP_C:
+	LD	HL,SynPathC
+	JR	SynLP_Open
+SynLP_Asm:
+	LD	HL,SynPathAsm
+	JR	SynLP_Open
+SynLP_Bat:
+	LD	HL,SynPathBat
+	JR	SynLP_Open
+SynLP_Make:
+	LD	HL,SynPathMake
+SynLP_Open:
+	CALL	SynLoadFileToBuf
+	RET	C
+	CALL	SynParseProfileBuf
+	RET
+
+SynLoadFileToBuf:
+	PUSH	IY
+	IN	A,(SLOT0)
+	PUSH	AF
+	LD	A,(DOSpage)
+	OUT	(SLOT0),A
+	LD	BC,#7FFD
+	LD	A,#10
+	OUT	(C),A
+	LD	A,#01
+	LD	C,#11
+	RST	#10
+	JR	C,SynLFFail
+	LD	(SynProfHnd),A
+	LD	HL,SynFileBuf
+	LD	DE,#03F0
+	LD	A,(SynProfHnd)
+	LD	C,#13
+	RST	#10
+	JR	C,SynLFCloseFail
+	LD	HL,SynFileBuf
+	ADD	HL,DE
+	XOR	A
+	LD	(HL),A
+	LD	A,(SynProfHnd)
+	LD	C,#12
+	RST	#10
+	XOR	A
+	LD	(SynLFRet),A
+	JR	SynLFExit
+SynLFCloseFail:
+	LD	A,(SynProfHnd)
+	LD	C,#12
+	RST	#10
+SynLFFail:
+	LD	A,#01
+	LD	(SynLFRet),A
+SynLFExit:
+	LD	BC,#7FFD
+	XOR	A
+	OUT	(C),A
+	POP	AF
+	OUT	(SLOT0),A
+	POP	IY
+	LD	A,(SynLFRet)
+	OR	A
+	JR	Z,SynLFOk
+	SCF
+	RET
+SynLFOk:
+	OR	A
+	RET
+
+SynParseProfileBuf:
+	LD	HL,SynFileBuf
+SynPPLine:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	#0D
+	JR	Z,SynPPNext
+	CP	#0A
+	JR	Z,SynPPNext
+	CP	';'
+	JR	Z,SynPPSkip
+	CP	'#'
+	JR	Z,SynPPSkip
+	PUSH	HL
+	LD	DE,SynKeyKw1
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPK2
+	CALL	SynCopyValueKw1
+	JR	SynPPSkip
+SynPPK2:
+	PUSH	HL
+	LD	DE,SynKeyKw2
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPCS
+	CALL	SynCopyValueKw2
+	JR	SynPPSkip
+SynPPCS:
+	PUSH	HL
+	LD	DE,SynKeyCase
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPSkip
+	CALL	SynParseCaseSensitive
+SynPPSkip:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	#0D
+	JR	Z,SynPPNext
+	CP	#0A
+	JR	Z,SynPPNext
+	INC	HL
+	JR	SynPPSkip
+SynPPNext:
+	INC	HL
+	JR	SynPPLine
+
+SynLineStartsWith:
+	PUSH	HL
+SynLSW0:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynLSWYes
+	LD	B,A
+	LD	A,(HL)
+	CALL	SynToLower
+	CP	B
+	JR	NZ,SynLSWNo
+	INC	HL
+	INC	DE
+	JR	SynLSW0
+SynLSWYes:
+	POP	HL
+	XOR	A
+	RET
+SynLSWNo:
+	POP	HL
+	LD	A,#01
+	OR	A
+	RET
+
+SynCopyValueKw1:
+	LD	DE,SynKeywords1
+	JR	SynCopyValueCommon
+SynCopyValueKw2:
+	LD	DE,SynKeywords2
+SynCopyValueCommon:
+	PUSH	DE
+	CALL	SynSeekEq
+	POP	DE
+	RET	C
+SynCVC0:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynCVCEnd
+	CP	#0D
+	JR	Z,SynCVCEnd
+	CP	#0A
+	JR	Z,SynCVCEnd
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	JR	SynCVC0
+SynCVCEnd:
+	XOR	A
+	LD	(DE),A
+	RET
+
+SynParseCaseSensitive:
+	CALL	SynSeekEq
+	RET	C
+	LD	A,(HL)
+	CP	'1'
+	JR	NZ,SynPCS0
+	LD	A,#01
+	LD	(SynCaseSensitive),A
+	RET
+SynPCS0:
+	XOR	A
+	LD	(SynCaseSensitive),A
+	RET
+
+SynSeekEq:
+SynSE0:
+	LD	A,(HL)
+	OR	A
+	SCF
+	RET	Z
+	CP	'='
+	JR	Z,SynSE1
+	CP	#0D
+	SCF
+	RET	Z
+	CP	#0A
+	SCF
+	RET	Z
+	INC	HL
+	JR	SynSE0
+SynSE1:
+	INC	HL
+	OR	A
+	RET
+
+SynCopyCsv:
+SynCSV0:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,SynCSV0
+	RET
+
+SynNameEqNoCase:
+	PUSH	HL
+	PUSH	DE
+SynNE0:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynNEEnd
+	LD	B,A
+	LD	A,(HL)
+	CP	'.'
+	JR	Z,SynNENo
+	OR	A
+	JR	Z,SynNENo
+	CALL	SynToLower
+	CP	B
+	JR	NZ,SynNENo
+	INC	HL
+	INC	DE
+	JR	SynNE0
+SynNEEnd:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynNEYes
+	CP	'.'
+	JR	Z,SynNEYes
+SynNENo:
+	POP	DE
+	POP	HL
+	LD	A,#01
+	OR	A
+	RET
+SynNEYes:
+	POP	DE
+	POP	HL
+	XOR	A
+	RET
+
 ; Copy current window full name/path into SynNameBuf.
 SynGetCurrName:
 	LD	IX,TxtWtab
@@ -580,9 +1105,23 @@ NotComm:
 SynExtBusy:	DEFB	#00
 SynBaseColor:	DEFB	#00
 SynLang:	DEFB	#00
+SynLoadedLang:	DEFB	#FF
+SynCBlockOpen:	DEFB	#00
+SynRenderPass:	DEFB	#00
+SynRenderLangValid:	DEFB	#00
+SynRenderLang:	DEFB	#00
+SynCaseSensitive:	DEFB	#00
 SynTokenLen:	DEFB	#00
+SynKwColor:	DEFB	#00
+SynProfHnd:	DEFB	#00
+SynLFRet:	DEFB	#01
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
+SynWorkBuf:	DEFW	#0000
+SynKwPtr:	DEFW	#0000
+SynKeywords1:	DEFS	512,0
+SynKeywords2:	DEFS	256,0
+SynFileBuf:	DEFS	1024,0
 
 SynExtC:	DEFB	"c",0
 SynExtH:	DEFB	"h",0
@@ -599,6 +1138,18 @@ SynExtZas:	DEFB	"zas",0
 SynExtTas:	DEFB	"tas",0
 SynExtInc:	DEFB	"inc",0
 SynExtS:	DEFB	"s",0
+
+SynNmMakefile:	DEFB	"makefile",0
+SynNmGnumake:	DEFB	"gnumakefile",0
+
+SynPathC:	DEFB	"SYNTAX\\C.SYN",0
+SynPathAsm:	DEFB	"SYNTAX\\ASM.SYN",0
+SynPathBat:	DEFB	"SYNTAX\\BAT.SYN",0
+SynPathMake:	DEFB	"SYNTAX\\MAKEFILE.SYN",0
+
+SynKeyKw1:	DEFB	"keywords=",0
+SynKeyKw2:	DEFB	"keywords2=",0
+SynKeyCase:	DEFB	"case_sensitive=",0
 
 SynCKeywords:
 	DEFB	"if,else,for,while,do,switch,case,default,break,continue,return,"

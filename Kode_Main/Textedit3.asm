@@ -336,6 +336,12 @@ EndTXTn:	LD	A,(IY+#06)
 	JR	EndTXTe
 ;[]===========================================================[]
 PrintPage:
+	LD	A,#01
+	LD	(SynRenderPass),A
+	XOR	A
+	LD	(SynRenderLangValid),A
+	XOR	A
+	LD	(SynCBlockOpen),A
 	LD	IX,TxtWtab
 	LD	A,(IX+#21)	; Window page
 	LD	(Page1+1),A
@@ -454,9 +460,19 @@ PrnPgEx:	CALL	ResCurs
 	CALL	SetCurs
 regA1:	LD	(IY+#02),#00
 regA2:	LD	(IY-#04),#00
-	JP	OnlySyntax
+	CALL	OnlySyntax
+	XOR	A
+	LD	(SynRenderPass),A
+	LD	(SynRenderLangValid),A
+	RET
 ;[]===========================================================[]
 RefreshPage:
+	LD	A,#01
+	LD	(SynRenderPass),A
+	XOR	A
+	LD	(SynRenderLangValid),A
+	XOR	A
+	LD	(SynCBlockOpen),A
 	LD	IX,TxtWtab
 	LD	A,(IX+#21)	; Window page
 	LD	(Page2+1),A
@@ -543,6 +559,9 @@ refA3:	LD	(IY+#00),#00
 refrEX:	CALL	ResCurs
 	CALL	PrnTxtW	    ; Print window on screen
 	CALL	SetCurs
+	XOR	A
+	LD	(SynRenderPass),A
+	LD	(SynRenderLangValid),A
 	RET 
 ;[]===========================================================[]
 PrintInfo:
