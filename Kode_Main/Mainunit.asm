@@ -391,6 +391,9 @@ TabSize:                BYTE	#08		; Size
 HiddMouse:      BYTE	#00		; 01 - with
 
 OptimalTAB:     BYTE	#01		; 01
+TABimpWidth:    BYTE	#08		; 04/08 - TAB display/import width
+TABimpW4:       BYTE	#00
+TABimpW8:       BYTE	#01
 
 WinPutMode:     BYTE	#00		; Text.windows: 0 - / 1
 

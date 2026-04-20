@@ -246,9 +246,12 @@ ConvTA1	LD	A,(HL)		; 0
 	JR	ConvTA3
 
 ConvTab	LD	A,E
-	AND	#07
 	LD	C,A
-	LD	A,#08
+	LD	A,(TABimpWidth)
+	DEC	A
+	AND	C
+	LD	C,A
+	LD	A,(TABimpWidth)
 	SUB	C
 	LD	B,A
 ConvTabLp:	LD	A,E
@@ -905,9 +908,12 @@ PlExp1:
 
 PlExpTryTab:
 	LD	A,(PlExpColumn)
-	AND	#07
 	LD	C,A
-	LD	A,#08
+	LD	A,(TABimpWidth)
+	DEC	A
+	AND	C
+	LD	C,A
+	LD	A,(TABimpWidth)
 	SUB	C
 	LD	(PlExpTabFill),A
 	LD	C,A

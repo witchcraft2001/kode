@@ -304,11 +304,11 @@ Dgotoln	DEFW	#0C16
 	DEFB	#FF
 ;[]===========================================================[]
 DeditorO
-	DEFW	#030E,#1A34
-	DEFB	"Editor options",0
+		DEFW	#0308,#163E
+		DEFB	"Editor options",0
 
-	DEFB	ClRadioBut
-	DEFW	#0204,#0417
+		DEFB	ClRadioBut
+		DEFW	#0204,#0417
 	DEFB	"Editor",0
 	DEFB	"~I~nsert mode",0,CTinsMD
 	DEFW	InsertMode
@@ -318,52 +318,61 @@ DeditorO
 	DEFW	SynHghLght
 	DEFB	"T~r~uncate line",0,CTeditD
 	DEFW	EditMode
+		DEFB	0
+
+		DEFB	ClCheckBut
+		DEFW	#021F,#0211
+		DEFB	"Keyboard",0
+		DEFB	"~A~ qwerty",0,CTkeypadD
+		DEFW	KeyPad1
+		DEFB	"~B~ dvorak",0,CTkeypadD
+		DEFW	KeyPad
 	DEFB	0
 
-	DEFB	ClCheckBut
-	DEFW	#021F,#020F
-	DEFB	"Keyboard",0
-	DEFB	"~A~ qwerty",0,CTkeypadD
-	DEFW	KeyPad1
-	DEFB	"~B~ dvorak",0,CTkeypadD
-	DEFW	KeyPad
-	DEFB	0
+		DEFB	ClRadioBut
+		DEFW	#0904,#0118
+		DEFB	"Mouse",0
+		DEFB	"Auto ~h~idden mouse",0,CTkeypadD
+		DEFW	HiddMouse
+		DEFB	0
 
-	DEFB	ClRadioBut
-	DEFW	#0A0D,#0118
-	DEFB	"Mouse",0
-	DEFB	"Auto ~h~idden mouse",0,CTkeypadD
-	DEFW	HiddMouse
-	DEFB	0
+		DEFB	ClRadioBut
+		DEFW	#091F,#0117
+		DEFB	"File format",0
+		DEFB	"O~p~timal tabulation",0,CTopttabD
+		DEFW	OptimalTAB
+		DEFB	0
 
-	DEFB	ClRadioBut
-	DEFW	#0F0D,#0118
-	DEFB	"Export",0
-	DEFB	"O~p~timal tabulation",0,CTopttabD
-	DEFW	OptimalTAB
-	DEFB	0
+		DEFB	InputLine
+		DEFW	#0E04
+		DEFB	"~L~abel Tab size:",0,#03,CTlabTD
+		DEFW	LabBuff
 
-	DEFB	InputLine
-	DEFW	#1409
-	DEFB	"~L~abel tab size:",0,#03,CTlabTD
-	DEFW	LabBuff
+		DEFB	InputLine
+		DEFW	#1004
+		DEFB	"Ta~b~ size:",0,#03,CTtabD
+		DEFW	TabBuff
 
-	DEFB	InputLine
-	DEFW	#141F
-	DEFB	"~T~ab size:",0,#03,CTtabD
-	DEFW	TabBuff
+		DEFB	ClCheckBut
+		DEFW	#0D1F,#0211
+		DEFB	"Tab width",0
+		DEFB	"~4~ spaces",0,CTtabImpD
+		DEFW	TABimpW4
+		DEFB	"~8~ spaces",0,CTtabImpD
+		DEFW	TABimpW8
+		DEFB	0
 
-	DEFB	Button
-	DEFW	#170A
-	DEFB	"  Help  ",0,cmCancel,CThelpD
+		DEFB	Button
+		DEFW	#130D
+		DEFB	"  Help  ",0,cmCancel,CThelpD
 
-	DEFB	Button
-	DEFW	#1716
-	DEFB	" Cancel ",0,cmCancel,CTcancD
+		DEFB	Button
+		DEFW	#1319
+		DEFB	" Cancel ",0,cmCancel,CTcancD
 
-	DEFB	Button
-	DEFW	#1722
-	DEFB	"   ~O~k   ",0,cmOkey,CTokD
+		DEFB	Button
+		DEFW	#1325
+		DEFB	"   ~O~k   ",0,cmOkey,CTokD
 	DEFB	#FF
 ;[]===========================================================[]
 Dcolors	DEFW	#0506

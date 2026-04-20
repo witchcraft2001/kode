@@ -80,6 +80,7 @@ CTbox2D         EQU #4C
 CTpal1D         EQU #4D
 CTpal2D         EQU #4E
 CTopttabD       EQU #4F
+CTtabImpD       EQU #4F
 
 ; Addresses
 StLlist:
@@ -431,5 +432,7 @@ sl4E:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Paper color for current object",#FF
 sl4F:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Tab optimization during export to file",#FF
+sl50:	DEFB cmHelpBox,"~F1~ Help",0,#3B
+	DEFB Txt,#B3," Width used for TAB import and optimal TAB export",#FF
 ;
  _mCollectInfo_addEnd

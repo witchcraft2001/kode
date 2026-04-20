@@ -50,6 +50,14 @@ InitSetUp
 	JR	Z,$+7
 	LD	A,#01
 	LD	(OptimalTAB),A
+	LD	A,(TABimpWidth)
+	CP	#04
+	JR	Z,InitTabW
+	CP	#08
+	JR	Z,InitTabW
+	LD	A,#08
+	LD	(TABimpWidth),A
+InitTabW
 	LD	A,(WinPutMode)
 	OR	A
 	JR	Z,$+7
@@ -357,6 +365,8 @@ InitE	DEFB	"TEXTEDIT",0
 	DEFW	HiddMouse
 	DEFB	"OPTIMALTAB",0
 	DEFW	OptimalTAB
+	DEFB	"TABDISPLAYIMPORTWIDTH",0
+	DEFW	TABimpWidth
 	DEFB	"WINDOWSPUTMODE",0
 	DEFW	WinPutMode
 	DEFB	0
@@ -636,6 +646,10 @@ SetupLst
 	DEFB	#0D,#0A
 	DEFB	"     eOptimalTab=",0,0
 	DEFW	OptimalTAB
+	DEFB	#0D,#0A
+	DEFB	#0D,#0A
+	DEFB	"     eTabDisplayImportWidth=",0,0
+	DEFW	TABimpWidth
 	DEFB	#0D,#0A
 	DEFB	#0D,#0A
 	DEFB	"     eWindowsPutMode=",0,0

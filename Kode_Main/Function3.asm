@@ -933,6 +933,20 @@ EditOp1:
 	CALL	Put16Num
 	LD	A,B
 	LD	(TabBuff+4),A
+	LD	A,(TABimpWidth)
+	CP	#04
+	JR	Z,EditOpTab4
+	XOR	A
+	LD	(TABimpW4),A
+	INC	A
+	LD	(TABimpW8),A
+	JR	EditOpTabE
+EditOpTab4:
+	LD	A,#01
+	LD	(TABimpW4),A
+	XOR	A
+	LD	(TABimpW8),A
+EditOpTabE:
 	LD	A,(SynHghLght)
 	LD	(CompSyn+1),A
 	LD	HL,DeditorO
@@ -980,6 +994,14 @@ EditOp2:
 	JR	NC,EditOp3
 	LD	(TabSize),A
 EditOp3:
+	LD	A,(TABimpW4)
+	OR	A
+	LD	A,#08
+	JR	Z,EditOp31
+	LD	A,#04
+EditOp31:
+	LD	(TABimpWidth),A
+EditOp4:
 	LD	A,(SynHghLght)
 CompSyn:
 	CP	#00
@@ -992,12 +1014,12 @@ CompSyn:
 	LD	B,A
 	LD	A,(SynHghLght)
 	OR	A
-	JR	NZ,EditOp4
+	JR	NZ,EditOp4A
 	LD	A,(ColTxtWin)
 	LD	E,A
 	LD	D,E
 	LD	B,D
-EditOp4:
+EditOp4A:
 	LD	A,E
 	LD	(CSLabel),A
 	LD	A,D
