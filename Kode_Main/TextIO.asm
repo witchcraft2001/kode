@@ -633,6 +633,14 @@ SaveCurX
 	DEFB	0
 SaveAddX
 	DEFB	0
+PlExpSrcLeft
+	DEFB	0
+PlExpOutLen
+	DEFB	0
+PlExpColumn
+	DEFB	0
+PlExpTabFill
+	DEFB	0
 ;[]===========================================================[]
 ; Procedure conversion TAS in file
 ;[]===========================================================[]
@@ -821,30 +829,107 @@ PlainExportLine:
 	LD	A,#03
 PlExp0:
 	SUB	#03
-	LD	C,A		; keep payload length
-	LD	B,A
+	LD	(PlExpSrcLeft),A
 	LD	HL,CompBuff+2
 	LD	DE,CompBuff
-	LD	A,B
+	XOR	A
+	LD	(PlExpOutLen),A
+	LD	(PlExpColumn),A
+	LD	A,(PlExpSrcLeft)
 	OR	A
 	JR	Z,PlExp1
-PlExpCp:	LD	A,(HL)
+PlExpCp:	LD	A,(PlExpSrcLeft)
+	OR	A
+	JR	Z,PlExp1
+	LD	A,(HL)
+	CP	#20
+	JR	NZ,PlExpChr
+	LD	A,(OptimalTAB)
+	OR	A
+	JR	Z,PlExpChr
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	CALL	PlExpTryTab
+	POP	HL
+	POP	DE
+	POP	BC
+	JR	C,PlExpTab
+PlExpChr:	LD	A,(HL)
 	CALL	ScrToDosChar
 	LD	(DE),A
 	INC	DE
 	INC	HL
-	DJNZ	PlExpCp
-	JR	PlExp1
+	LD	A,(PlExpSrcLeft)
+	DEC	A
+	LD	(PlExpSrcLeft),A
+	LD	A,(PlExpOutLen)
+	INC	A
+	LD	(PlExpOutLen),A
+	LD	A,(PlExpColumn)
+	INC	A
+	LD	(PlExpColumn),A
+	JR	PlExpCp
+PlExpTab:	LD	A,#09
+	LD	(DE),A
+	INC	DE
+	LD	A,(PlExpOutLen)
+	INC	A
+	LD	(PlExpOutLen),A
+	LD	A,(PlExpColumn)
+	LD	C,A
+	LD	A,(PlExpTabFill)
+	ADD	A,C
+	LD	(PlExpColumn),A
+	LD	A,(PlExpTabFill)
+	LD	C,A
+	LD	A,(PlExpSrcLeft)
+	SUB	C
+	LD	(PlExpSrcLeft),A
+	LD	B,#00
+	ADD	HL,BC
+	JR	PlExpCp
 PlExp1:
 	LD	HL,CompBuff
-	LD	A,C
+	LD	A,(PlExpOutLen)
 	ADD	A,L
 	LD	L,A
 	JR	NC,$+3
 	INC	H
 	LD	(HL),#0D
-	INC	C
+	LD	A,(PlExpOutLen)
+	INC	A
+	LD	C,A
 	LD	B,#00
+	RET
+
+PlExpTryTab:
+	LD	A,(PlExpColumn)
+	AND	#07
+	LD	C,A
+	LD	A,#08
+	SUB	C
+	LD	(PlExpTabFill),A
+	LD	C,A
+	LD	A,(PlExpSrcLeft)
+	CP	C
+	JR	C,PlExpTShort
+	PUSH	HL
+	LD	B,C
+PlExpT0:	LD	A,(HL)
+	CP	#20
+	JR	NZ,PlExpTNo
+	INC	HL
+	DJNZ	PlExpT0
+	POP	HL
+	SCF
+	RET
+PlExpTNo:
+	POP	HL
+	OR	A
+	RET
+PlExpTShort:
+	OR	A
 	RET
 
 ; A: DOS file byte -> screen/editor byte (identity)
