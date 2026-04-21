@@ -192,16 +192,16 @@ exeLoader.Start:
 	LD	C,Dss.Close
 	RST	ToDSS					; Close file
 
-; Page Dialogwn2 in so AppPathBuf/FullPathBuf/BuildSetupPath are accessible
+; Page Dialogwn2 so LaunchPathBuf/CaptureDir are reachable, then snapshot
+; the launch directory once. SaveSetUp will use this later to anchor the
+; settings file to a stable location (with PathCur save/restore around it),
+; so the editor's own file navigation can't push KODE.SET elsewhere.
 	LD	A,(ModulesPages.Dialogwn2)
 	OUT	(SLOT3),A
+	LD	HL,LaunchPathBuf
+	CALL	CaptureDir
 
-; Capture the caller's working directory (disk + path) into WorkPathBuf
-	CALL	CaptureWorkPath
-
-; Build full path "APPDIR\KODE.SET" in FullPathBuf and try to open it
 	LD	HL,SetupName
-	CALL	BuildSetupPath				; HL -> path to open (full or fallback)
 	SUB	A
 	LD	C,Dss.Open
 	RST	ToDSS

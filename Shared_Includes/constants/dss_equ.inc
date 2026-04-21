@@ -9,6 +9,7 @@ Dss.Read         EQU #13
 Dss.Write        EQU #14
 Dss.Move_FP      EQU #15
 
+Dss.ChDir        EQU #1D
 Dss.CurDir       EQU #1E
 
 Dss.GetMem       EQU #3D
