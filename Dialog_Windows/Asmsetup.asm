@@ -466,9 +466,10 @@ SaveSetUp
 	LD	A,#10		; Enable. ports vg93
 	OUT	(C),A
 	LD	HL,SetUpName	; Internal operation
+	CALL	BuildSetupPath	; HL -> full path inside EXE directory
 	SUB	A		; Internal operation
-	LD	C,#0A		; Function DOS: Create File
-	RST	#10
+	LD	C,Dss.Create	; Function DOS: Create File
+	RST	ToDSS
 	LD	(FileHandle),A	; File handle
 	JR	C,SaveSte
 	LD	HL,SetupBuff	; Memory
@@ -763,8 +764,86 @@ SetupLst
 	DEFB	#0D,#0A
 	DEFB	#FF
 ;[]===========================================================[]
+; Build a full path inside the EXE's own directory.
+; Used to load / save config files next to KODE.EXE instead of in the
+; caller's current directory.
+; On entry:  HL = pointer to ASCIIZ file name (e.g. "KODE.SET")
+; On exit:   HL = pointer to ASCIIZ full path ready for DSS Open/Create
+;            (FullPathBuf on success; original filename on error)
+; Requires:  DOSpage currently mapped at SLOT0,
+;            this page (Dialog_Windows_PG2) mapped in any slot.
+BuildSetupPath
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL		; save filename pointer
+	LD	DE,AppPathBuf
+	LD	B,#01		; AppInfo sub-fn 1: application directory
+	LD	C,Dss.AppInfo
+	RST	ToDSS
+	JR	C,BldSetFb	; fallback on error: just use filename as-is
+	LD	HL,AppPathBuf
+	LD	A,(HL)
+	OR	A
+	JR	Z,BldSetFb	; empty app path: fallback
+	LD	DE,FullPathBuf
+BldSetCp1
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,BldSetCp1
+	DEC	DE		; point DE back at the zero terminator
+	POP	HL		; restore filename pointer
+BldSetCp2
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,BldSetCp2
+	LD	HL,FullPathBuf
+	POP	DE
+	POP	BC
+	RET
+BldSetFb
+	POP	HL		; restore filename pointer
+	POP	DE
+	POP	BC
+	RET
+;[]===========================================================[]
+; Capture the caller's working directory (drive + path) into WorkPathBuf
+; so the editor can return to it later even after its own file operations.
+; Requires:  DOSpage at SLOT0, this page mapped in any slot.
+CaptureWorkPath
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	C,Dss.CurDisk
+	RST	ToDSS		; A = current drive (0='A', 1='B', ...)
+	ADD	A,'A'
+	LD	HL,WorkPathBuf
+	LD	(HL),A
+	INC	HL
+	LD	(HL),':'
+	INC	HL
+	LD	(HL),0
+	LD	C,Dss.CurDir
+	RST	ToDSS		; writes "\PATH\0" (incl. leading \) at HL
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
+;[]===========================================================[]
 SetUpName:
 	DEFB	"KODE.SET",0
+;[]===========================================================[]
+AppPathBuf:
+	BLOCK	256,0
+FullPathBuf:
+	BLOCK	256,0
+WorkPathBuf:
+	BLOCK	256,0
 ;[]===========================================================[]
 SetupBuff:
 	DEFW	#FFFF

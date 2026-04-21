@@ -39,14 +39,14 @@
  OUTPUT 'build/KODE.EXE'
 	DISP KodeEXE.ORG-exe_header.Size
 exe_header equ $
- BYTE	'EXE'				; 0-3 EXE
- BYTE	0				; 4 version of exe file
- DWORD	exeLoader.Start - exe_header		; 5-8 pointer on in file for in Code_addr. Low addr, High addr
- WORD	exeLoader.Size			; 9-10 size 0
- WORD	0,0,0				; 11-16 reserved
- WORD	exeLoader.Start			; 17-18 in memory (#4100-#FFFF)
- WORD	exeLoader.Start			; 19-20 in memory with (Reg. PC)
- WORD	KodeEXE.stackPoint			; 21-22 (Reg. SP)
+ BYTE	'EXE'				; 0-2 EXE signature
+ BYTE	1				; 3   EXE format version (1 = current; 0 = deprecated)
+ DWORD	exeLoader.Start - exe_header		; 4-7 code offset in file (Low addr, High addr)
+ WORD	exeLoader.Size			; 8-9  primary loader size (0 - no loader)
+ WORD	0,0,0				; 10-15 reserved
+ WORD	exeLoader.Start			; 16-17 load address in memory
+ WORD	exeLoader.Start			; 18-19 entry point (Reg. PC)
+ WORD	KodeEXE.stackPoint			; 20-21 initial stack (Reg. SP)
  BLOCK	10,' '				; 23-XXX for in HEX
  BYTE	'Kode Editor     '	
  BYTE	'     v ',_progVERSION,'     '
@@ -192,7 +192,16 @@ exeLoader.Start:
 	LD	C,Dss.Close
 	RST	ToDSS					; Close file
 
+; Page Dialogwn2 in so AppPathBuf/FullPathBuf/BuildSetupPath are accessible
+	LD	A,(ModulesPages.Dialogwn2)
+	OUT	(SLOT3),A
+
+; Capture the caller's working directory (disk + path) into WorkPathBuf
+	CALL	CaptureWorkPath
+
+; Build full path "APPDIR\KODE.SET" in FullPathBuf and try to open it
 	LD	HL,SetupName
+	CALL	BuildSetupPath				; HL -> path to open (full or fallback)
 	SUB	A
 	LD	C,Dss.Open
 	RST	ToDSS
@@ -210,8 +219,6 @@ exeLoader.Start:
 	LD	A,HX
 	CP	#11
 	JR	NC,NoSetup
-	LD	A,(ModulesPages.Dialogwn2)
-	OUT	(SLOT3),A
 	PUSH	IX
 	LD	IX,#0000
 	LD	HL,#0000
@@ -263,10 +270,9 @@ NoSetup:	IN	A,(SLOT0)
 ;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 */
 
-	LD	C,Dss.CurDisk
-	RST	ToDSS
-	LD	C,Dss.ChDisk
-	RST	ToDSS
+; EXE v1 preserves caller's current dir. Do not issue CurDisk/ChDisk here:
+; CHDISK would force curdir back to the root of the current drive and lose
+; the working directory the user launched Kode from.
 
 	LD	A,(ModulesPages.KodeMain1)
 	OUT	(SLOT0),A
