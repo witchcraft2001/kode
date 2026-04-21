@@ -338,10 +338,12 @@ EndTXTn:	LD	A,(IY+#06)
 PrintPage:
 	LD	A,#01
 	LD	(SynRenderPass),A
-	XOR	A
+	CALL	SynDetectLang
+	LD	(SynLang),A
+	LD	(SynRenderLang),A
+	LD	A,#01
 	LD	(SynRenderLangValid),A
-	XOR	A
-	LD	(SynCBlockOpen),A
+	CALL	SynSeedBlockFromTop
 	LD	IX,TxtWtab
 	LD	A,(IX+#21)	; Window page
 	LD	(Page1+1),A
@@ -473,10 +475,12 @@ regA2:	LD	(IY-#04),#00
 RefreshPage:
 	LD	A,#01
 	LD	(SynRenderPass),A
-	XOR	A
+	CALL	SynDetectLang
+	LD	(SynLang),A
+	LD	(SynRenderLang),A
+	LD	A,#01
 	LD	(SynRenderLangValid),A
-	XOR	A
-	LD	(SynCBlockOpen),A
+	CALL	SynSeedBlockFromTop
 	LD	IX,TxtWtab
 	LD	A,(IX+#21)	; Window page
 	LD	(Page2+1),A

@@ -645,11 +645,6 @@ scrlup	LD	A,#00
 	CALL	ReCompile
 	POP	HL
 	POP	DE
-	PUSH	DE
-	PUSH	HL
-	CALL	SyntaxExtLine
-	POP	HL
-	POP	DE
 	IN	A,(SLOT3)
 	PUSH	AF
 	LD	IX,TxtWtab

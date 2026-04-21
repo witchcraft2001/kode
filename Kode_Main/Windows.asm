@@ -285,9 +285,12 @@ InitPage
 	CALL	Z,PutString
 	LD	A,#01
 	LD	(SynRenderPass),A
-	XOR	A
+	CALL	SynDetectLang
+	LD	(SynLang),A
+	LD	(SynRenderLang),A
+	LD	A,#01
 	LD	(SynRenderLangValid),A
-	LD	(SynCBlockOpen),A
+	CALL	SynSeedBlockFromTop
 	LD	A,(IY+#02)
 	LD	(initA1+3),A
 	LD	A,(IY-#04)

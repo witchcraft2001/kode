@@ -39,7 +39,7 @@ SyntaxExtTryBuf:
 	LD	(SynLang),A
 	OR	A
 	RET	Z
-	CALL	SynSeedBlockToCurrent
+	CALL	SynSeedBlockAtCursor
 	JR	SynExtRun
 
 SynExtRender:
@@ -687,10 +687,12 @@ SynFBCF:
 	OR	A
 	RET
 
+; Seed SynCBlockOpen with state entering the first visible line.
+; Assumes SynLang already set; walks UpLinePg lines from #8040.
 SynSeedBlockFromTop:
 	XOR	A
 	LD	(SynCBlockOpen),A
-	CALL	SynDetectLang
+	LD	A,(SynLang)
 	CP	#01
 	RET	NZ
 	LD	IX,#8040
@@ -709,9 +711,9 @@ SynSBTLp:
 	LD	A,H
 	OR	L
 	RET	Z
-	LD	E,(IX+#00)
-	LD	D,#00
-	ADD	IX,DE
+	LD	C,(IX+#00)
+	LD	B,#00
+	ADD	IX,BC
 	JR	SynSBTLp
 
 SynScanCompLine:
@@ -773,15 +775,17 @@ SynSCStep:
 	DEC	B
 	JR	SynSCLp
 
-SynSeedBlockToCurrent:
+; Seed SynCBlockOpen with state entering the cursor line (BegString).
+; Assumes SynLang already set; walks #8040 .. BegString.
+SynSeedBlockAtCursor:
 	XOR	A
 	LD	(SynCBlockOpen),A
 	LD	A,(SynLang)
 	CP	#01
 	RET	NZ
-	LD	IX,(AdrPage)
+	LD	IX,#8040
 	LD	DE,(BegString)
-SynSBCLp:
+SynSBACLp:
 	PUSH	IX
 	POP	HL
 	OR	A
@@ -794,7 +798,7 @@ SynSBCLp:
 	LD	C,(IX+#00)
 	LD	B,#00
 	ADD	IX,BC
-	JR	SynSBCLp
+	JR	SynSBACLp
 
 SynEnsureProfileLoaded:
 	LD	A,(SynLang)
