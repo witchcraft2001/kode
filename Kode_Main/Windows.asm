@@ -283,6 +283,11 @@ InitPage
 	LD	A,(ReadyStr)	; Was not touched
 	OR	A
 	CALL	Z,PutString
+	LD	A,#01
+	LD	(SynRenderPass),A
+	XOR	A
+	LD	(SynRenderLangValid),A
+	LD	(SynCBlockOpen),A
 	LD	A,(IY+#02)
 	LD	(initA1+3),A
 	LD	A,(IY-#04)
@@ -293,9 +298,9 @@ InitPage
 	LD	IX,(AdrPage)
 	LD	B,#1C
 	LD	C,#00
-	EXX 
+	EXX
 	LD	DE,WinBoxBuff+10200	; !hardcode
-	EXX 
+	EXX
 InitPg1	LD	A,(IX+#00)
 	OR	A
 	JR	Z,initA1
@@ -308,6 +313,9 @@ InitPg1	LD	A,(IX+#00)
 	INC	DE
 	PUSH	HL
 	CALL	ReCompile
+	POP	HL
+	PUSH	HL
+	CALL	SyntaxExtLine
 	POP	HL
 	LD	A,(IY+#07)
 	ADD	A,A
@@ -336,6 +344,9 @@ InitPg1	LD	A,(IX+#00)
 initA1	LD	(IY+#02),#00
 initA2	LD	(IY-#04),#00
 initA3	LD	(IY+#05),#00
+	XOR	A
+	LD	(SynRenderPass),A
+	LD	(SynRenderLangValid),A
 	LD	A,B
 	OR	A
 	RET	Z

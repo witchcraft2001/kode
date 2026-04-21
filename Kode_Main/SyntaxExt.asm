@@ -4,8 +4,30 @@
 ; No file I/O, no dynamic profile loading.
 
 SyntaxExtTry:
+	LD	A,(IY+#02)
+	LD	(SynLineLen),A
+	LD	HL,(BegString)
+	INC	HL
+	LD	A,(HL)
+	LD	(SynLineAttr),A
 	LD	HL,TextBuff
 	LD	(SynWorkBuf),HL
+	JP	SyntaxExtTryBuf
+
+; Syntax-highlight an arbitrary decompiled line buffer.
+; In: HL = buffer (char,attr,char,attr,...), IX = packed line header
+;     (IX+0 = text_len+3, IX+1 = attr byte, bit 6 = selected)
+SyntaxExtLine:
+	LD	(SynWorkBuf),HL
+	LD	A,(IX+#00)
+	CP	#03
+	JR	NC,SynExLn0
+	LD	A,#03
+SynExLn0:
+	SUB	#03
+	LD	(SynLineLen),A
+	LD	A,(IX+#01)
+	LD	(SynLineAttr),A
 	JP	SyntaxExtTryBuf
 
 SyntaxExtTryBuf:
@@ -17,8 +39,7 @@ SyntaxExtTryBuf:
 	LD	(SynLang),A
 	OR	A
 	RET	Z
-	XOR	A
-	LD	(SynCBlockOpen),A
+	CALL	SynSeedBlockToCurrent
 	JR	SynExtRun
 
 SynExtRender:
@@ -54,8 +75,7 @@ SynSetupLineColors:
 	LD	A,(CSLabel)
 	LD	(TmpColL),A
 	LD	A,(ColTxtWin)
-	LD	HL,(BegString)
-	INC	HL
+	LD	HL,SynLineAttr
 	BIT	6,(HL)
 	JR	Z,SynSLC0
 SynSLSel:
@@ -66,8 +86,8 @@ SynSLSel:
 SynSLC0:
 	LD	(SynBaseColor),A
 	LD	C,A
-	LD	B,(IY+#02)
-	LD	A,B
+	LD	A,(SynLineLen)
+	LD	B,A
 	OR	A
 	RET	Z
 	LD	HL,(SynWorkBuf)
@@ -199,7 +219,8 @@ SynComMake:
 	JP	SynPaintFromChar
 
 SynComBat:
-	LD	B,(IY+#02)
+	LD	A,(SynLineLen)
+	LD	B,A
 	LD	HL,(SynWorkBuf)
 SynBatLp:
 	LD	A,B
@@ -242,7 +263,8 @@ SynComC:
 	OR	A
 	JR	Z,SynComCScan
 	LD	HL,(SynWorkBuf)
-	LD	B,(IY+#02)
+	LD	A,(SynLineLen)
+	LD	B,A
 	CALL	SynPaintToEnd
 	CALL	SynFindBlockClose
 	RET	C
@@ -250,7 +272,8 @@ SynComC:
 	LD	(SynCBlockOpen),A
 	RET
 SynComCScan:
-	LD	B,(IY+#02)
+	LD	A,(SynLineLen)
+	LD	B,A
 	LD	HL,(SynWorkBuf)
 SynCCLp:
 	LD	A,B
@@ -298,7 +321,8 @@ SynCCNext:
 
 SynPaintFromChar:
 	LD	C,A
-	LD	B,(IY+#02)
+	LD	A,(SynLineLen)
+	LD	B,A
 	LD	HL,(SynWorkBuf)
 SynPFC0:
 	LD	A,B
@@ -381,7 +405,8 @@ SynHighlightKeywords:
 	RET
 
 SynHighlightKeywordsOne:
-	LD	B,(IY+#02)
+	LD	A,(SynLineLen)
+	LD	B,A
 	LD	HL,(SynWorkBuf)
 SynKWLp:
 	LD	A,B
@@ -629,7 +654,8 @@ SynToUpper:
 	RET
 
 SynFindBlockClose:
-	LD	B,(IY+#02)
+	LD	A,(SynLineLen)
+	LD	B,A
 	LD	HL,(SynWorkBuf)
 SynFBC0:
 	LD	A,B
@@ -765,9 +791,9 @@ SynSBCLp:
 	OR	A
 	RET	Z
 	CALL	SynScanCompLine
-	LD	E,(IX+#00)
-	LD	D,#00
-	ADD	IX,DE
+	LD	C,(IX+#00)
+	LD	B,#00
+	ADD	IX,BC
 	JR	SynSBCLp
 
 SynEnsureProfileLoaded:
@@ -1111,6 +1137,8 @@ SynRenderPass:	DEFB	#00
 SynRenderLangValid:	DEFB	#00
 SynRenderLang:	DEFB	#00
 SynCaseSensitive:	DEFB	#00
+SynLineLen:	DEFB	#00
+SynLineAttr:	DEFB	#00
 SynTokenLen:	DEFB	#00
 SynKwColor:	DEFB	#00
 SynProfHnd:	DEFB	#00

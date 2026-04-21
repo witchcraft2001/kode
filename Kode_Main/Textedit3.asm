@@ -380,7 +380,12 @@ PrPage1:	LD	E,LX
 	LD	(regA1+3),A
 	LD	A,(IY-#04)
 	LD	(regA2+3),A
-PrPage2:	LD	A,C		;Y pos
+PrPage2:	PUSH	BC
+	PUSH	HL
+	CALL	SyntaxExtLine
+	POP	HL
+	POP	BC
+	LD	A,C		;Y pos
 	ADD	A,(IY+#04)
 	LD	D,A
 	LD	A,H
@@ -460,7 +465,6 @@ PrnPgEx:	CALL	ResCurs
 	CALL	SetCurs
 regA1:	LD	(IY+#02),#00
 regA2:	LD	(IY-#04),#00
-	CALL	OnlySyntax
 	XOR	A
 	LD	(SynRenderPass),A
 	LD	(SynRenderLangValid),A
@@ -507,7 +511,12 @@ RefPage:	LD	A,(IX+#00)
 	CALL	ReCompile
 	POP	BC
 	POP	HL
-RefPg1:	LD	A,C		;Y pos
+RefPg1:	PUSH	BC
+	PUSH	HL
+	CALL	SyntaxExtLine
+	POP	HL
+	POP	BC
+	LD	A,C		;Y pos
 	ADD	A,(IY+#04)
 	LD	D,A
 	LD	A,H

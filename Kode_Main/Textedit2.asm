@@ -645,6 +645,11 @@ scrlup	LD	A,#00
 	CALL	ReCompile
 	POP	HL
 	POP	DE
+	PUSH	DE
+	PUSH	HL
+	CALL	SyntaxExtLine
+	POP	HL
+	POP	DE
 	IN	A,(SLOT3)
 	PUSH	AF
 	LD	IX,TxtWtab
@@ -656,14 +661,14 @@ scrlup	LD	A,#00
 	ADD	HL,BC
 	LD	C,(IY+#05)
 	SLA	C
-	LDIR 
+	LDIR
 	POP	AF
 	OUT	(SLOT3),A
 	CALL	PrnTxtW
 	POP	BC
 	POP	AF
 	DEC	A
-	RET 
+	RET
 ;[]===========================================================[]
 ScrollDown
 	PUSH	AF
