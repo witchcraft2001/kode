@@ -368,6 +368,7 @@ ColHiddFr:      BYTE	#08,#0F		; Color no select window
 ColMnemon:      BYTE	#1F,#0F		; Color z80 mnemonics
 ColLabel:               BYTE	#1E,#0F		; Color labels
 ColComment:     BYTE	#1D,#0F		; Color comments
+ColBrace:       BYTE	#1B,#0F		; Color brackets ()[]<>
 
 ; [miscel]
 ColWindAtr:     BYTE	#0A,#0F		; Color close button,zoom button

@@ -102,6 +102,11 @@ InitTabWE
 	OR	B
 	LD	(ColComment),A
 	LD	(CSComment),A
+	LD	A,(ColBrace)
+	AND	C
+	OR	B
+	LD	(ColBrace),A
+	LD	(CSBrace),A
 	LD	A,(SynHghLght)
 	OR	A
 	RET	NZ
@@ -109,7 +114,8 @@ InitTabWE
 	LD	(CSLabel),A
 	LD	(CSMnemon),A
 	LD	(CSComment),A
-	RET 
+	LD	(CSBrace),A
+	RET
 ;[]===========================================================[]
 InitText
 	LD	DE,SetupBuff

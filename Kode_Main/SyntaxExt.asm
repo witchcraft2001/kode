@@ -65,6 +65,9 @@ SynExtRDet:
 	JR	SynExtRun
 SynExtRun:
 	CALL	SynHighlightComments
+	CALL	SynEnsureProfileLoaded
+	CALL	SynHighlightKeywords
+	CALL	SynHighlightBrackets
 	RET
 
 SynSetupLineColors:
@@ -74,6 +77,8 @@ SynSetupLineColors:
 	LD	(TmpColM),A
 	LD	A,(CSLabel)
 	LD	(TmpColL),A
+	LD	A,(CSBrace)
+	LD	(TmpColB),A
 	LD	A,(ColTxtWin)
 	LD	HL,SynLineAttr
 	BIT	6,(HL)
@@ -83,6 +88,7 @@ SynSLSel:
 	LD	(TmpColC),A
 	LD	(TmpColM),A
 	LD	(TmpColL),A
+	LD	(TmpColB),A
 SynSLC0:
 	LD	(SynBaseColor),A
 	LD	C,A
@@ -429,10 +435,15 @@ SynKWLp:
 	POP	BC
 	JR	C,SynKWNext
 	LD	DE,(SynKwPtr)
+	PUSH	HL
 	CALL	SynWordInList
-	JR	NZ,SynKWNext
+	POP	HL
+	JR	NZ,SynKWSkipWord
 	LD	A,(SynKwColor)
+	PUSH	HL
 	CALL	SynColorWord
+	POP	HL
+SynKWSkipWord:
 	LD	A,(SynTokenLen)
 	LD	E,A
 	LD	D,#00
@@ -447,6 +458,48 @@ SynKWNext:
 	INC	HL
 	DEC	B
 	JR	SynKWLp
+
+; Paint brackets ()[]<> with TmpColB — only on chars still at SynBaseColor
+; so we don't overpaint comments or strings.
+SynHighlightBrackets:
+	LD	A,(SynLineLen)
+	OR	A
+	RET	Z
+	LD	B,A
+	LD	HL,(SynWorkBuf)
+SynHBLp:
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	C,A
+	LD	A,(SynBaseColor)
+	CP	C
+	JR	NZ,SynHBNext
+	LD	A,(HL)
+	CP	'('
+	JR	Z,SynHBPaint
+	CP	')'
+	JR	Z,SynHBPaint
+	CP	'['
+	JR	Z,SynHBPaint
+	CP	']'
+	JR	Z,SynHBPaint
+	CP	'<'
+	JR	Z,SynHBPaint
+	CP	'>'
+	JR	Z,SynHBPaint
+	JR	SynHBNext
+SynHBPaint:
+	INC	HL
+	LD	A,(TmpColB)
+	LD	(HL),A
+	DEC	HL
+SynHBNext:
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	NZ,SynHBLp
+	RET
 
 SynCollectWord:
 	LD	DE,SynToken
@@ -851,6 +904,7 @@ SynLP_Open:
 	CALL	SynParseProfileBuf
 	RET
 
+; Load HL=<filename path> into SynFileBuf (null-terminated, up to 0x03F0 bytes).
 SynLoadFileToBuf:
 	PUSH	IY
 	IN	A,(SLOT0)
@@ -880,7 +934,7 @@ SynLoadFileToBuf:
 	RST	#10
 	XOR	A
 	LD	(SynLFRet),A
-	JR	SynLFExit
+	JR	SynLFTeardown
 SynLFCloseFail:
 	LD	A,(SynProfHnd)
 	LD	C,#12
@@ -888,7 +942,7 @@ SynLFCloseFail:
 SynLFFail:
 	LD	A,#01
 	LD	(SynLFRet),A
-SynLFExit:
+SynLFTeardown:
 	LD	BC,#7FFD
 	XOR	A
 	OUT	(C),A
