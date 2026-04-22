@@ -29,10 +29,12 @@ mcopy -i "$image_path" -o "$exe_path" ::KODE.EXE
 # Copy external syntax profiles into SYNTAX directory
 mmd -i "$image_path" ::/SYNTAX
 mcopy -i "$image_path" -o "$repo_root/syntax/index.lst" ::/SYNTAX/INDEX.LST
-mcopy -i "$image_path" -o "$repo_root/syntax/asm.syn" ::/SYNTAX/ASM.SYN
-mcopy -i "$image_path" -o "$repo_root/syntax/c.syn" ::/SYNTAX/C.SYN
-mcopy -i "$image_path" -o "$repo_root/syntax/bat.syn" ::/SYNTAX/BAT.SYN
-mcopy -i "$image_path" -o "$repo_root/syntax/makefile.syn" ::/SYNTAX/MAKEFILE.SYN
+for syn_file in "$repo_root/syntax/"*.syn; do
+  [ -e "$syn_file" ] || continue
+  base=$(basename "$syn_file")
+  upper=$(printf '%s' "$base" | tr 'a-z' 'A-Z')
+  mcopy -i "$image_path" -o "$syn_file" "::/SYNTAX/$upper"
+done
 
 echo "Created FAT12 floppy image: $image_path"
 echo "Copied file: $exe_path -> ::KODE.EXE"

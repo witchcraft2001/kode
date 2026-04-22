@@ -105,8 +105,12 @@ SynSLC1:
 	DJNZ	SynSLC1
 	RET
 
-; A: 0 none, 1 c/cpp/h, 2 asm-like, 3 bat/cmd, 4 make
+; Detect language for the current window.
+; On exit: A = 1 if a profile matched (SynProfileName filled with e.g. "c.syn"),
+;          A = 0 if no profile matched (no highlighting).
 SynDetectLang:
+	XOR	A
+	LD	(SynProfileName),A		; clear any previous profile name
 	CALL	SynGetCurrName
 	LD	HL,SynNameBuf
 	LD	DE,#0000
@@ -130,138 +134,252 @@ SynDNxt:
 	INC	HL
 	JR	SynDLp
 SynDDone:
+	; DE = extension pointer in SynNameBuf (0 if no extension)
+	PUSH	DE
+	CALL	SynLoadIndexIfNeeded
+	POP	DE
+	LD	A,(SynIndexLoaded)
+	CP	#01
+	JR	NZ,SynDTryDirect
+	PUSH	DE
+	CALL	SynDetectLangViaIndex
+	POP	DE
+	OR	A
+	RET	NZ
+SynDTryDirect:
+	; INDEX.LST had no match (or it's missing) — try loading <ext>.syn
+	; directly from the SYNTAX directory. No-ext files (like "makefile")
+	; only resolve through INDEX.LST.
 	LD	A,D
 	OR	E
-	JP	Z,SynDNone
-	LD	H,D
-	LD	L,E
-	LD	DE,SynExtC
-	CALL	SynExtEq
-	JP	Z,SynIsC
-	LD	DE,SynExtH
-	CALL	SynExtEq
-	JP	Z,SynIsC
-	LD	DE,SynExtCpp
-	CALL	SynExtEq
-	JP	Z,SynIsC
-	LD	DE,SynExtHpp
-	CALL	SynExtEq
-	JP	Z,SynIsC
-	LD	DE,SynExtBat
-	CALL	SynExtEq
-	JP	Z,SynIsBat
-	LD	DE,SynExtCmd
-	CALL	SynExtEq
-	JP	Z,SynIsBat
-	LD	DE,SynExtMk
-	CALL	SynExtEq
-	JP	Z,SynIsMake
-	LD	DE,SynExtMak
-	CALL	SynExtEq
-	JP	Z,SynIsMake
-	LD	DE,SynExtMake
-	CALL	SynExtEq
-	JP	Z,SynIsMake
-	LD	DE,SynExtAsm
-	CALL	SynExtEq
-	JP	Z,SynIsAsm
-	LD	DE,SynExtZ80
-	CALL	SynExtEq
-	JP	Z,SynIsAsm
-	LD	DE,SynExtZas
-	CALL	SynExtEq
-	JP	Z,SynIsAsm
-	LD	DE,SynExtTas
-	CALL	SynExtEq
-	JP	Z,SynIsAsm
-	LD	DE,SynExtInc
-	CALL	SynExtEq
-	JP	Z,SynIsAsm
-	LD	DE,SynExtS
-	CALL	SynExtEq
-	JP	Z,SynIsAsm
-SynDNone:
-	LD	HL,SynNameBuf
-	LD	DE,SynNmMakefile
-	CALL	SynNameEqNoCase
-	JR	Z,SynIsMake
-	LD	HL,SynNameBuf
-	LD	DE,SynNmGnumake
-	CALL	SynNameEqNoCase
-	JR	Z,SynIsMake
-	XOR	A
-	RET
-SynIsC:
+	JR	Z,SynDNoMatch
+	CALL	SynBuildExtProfileName
 	LD	A,#01
 	RET
-SynIsAsm:
-	LD	A,#02
-	RET
-SynIsBat:
-	LD	A,#03
-	RET
-SynIsMake:
-	LD	A,#04
+SynDNoMatch:
+	XOR	A
 	RET
 
+; Load SYNTAX\INDEX.LST into SynIndexBuf once per session.
+; SynIndexLoaded: 0 = not attempted, 1 = success, #FF = failed (don't retry).
+SynLoadIndexIfNeeded:
+	LD	A,(SynIndexLoaded)
+	OR	A
+	RET	NZ
+	LD	DE,SynIndexBuf
+	LD	(SynLFDst),DE
+	LD	DE,#017F
+	LD	(SynLFMax),DE
+	LD	HL,SynPathIndex
+	CALL	SynLoadFileToBuf
+	JR	C,SynLI_Fail
+	LD	A,#01
+	LD	(SynIndexLoaded),A
+	RET
+SynLI_Fail:
+	LD	A,#FF
+	LD	(SynIndexLoaded),A
+	RET
+
+; In: DE = pointer to filename extension in SynNameBuf (0 if no extension —
+;         use whole filename for matching, covers e.g. "makefile").
+; Out: A = 1 if a profile matched (SynProfileName is filled with the name
+;         from INDEX.LST, e.g. "c.syn"), 0 if nothing matched.
+SynDetectLangViaIndex:
+	LD	A,D
+	OR	E
+	JR	NZ,SynDVI_HasExt
+	LD	DE,SynNameBuf
+SynDVI_HasExt:
+	LD	HL,SynIndexBuf
+SynDVI_LineLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynDVI_NotFound
+	CP	#0D
+	JR	Z,SynDVI_NextLine
+	CP	#0A
+	JR	Z,SynDVI_NextLine
+	CP	';'
+	JR	Z,SynDVI_SkipLine
+	CP	'#'
+	JR	Z,SynDVI_SkipLine
+	PUSH	HL				; save start of line (profile name)
+SynDVI_SeekEq:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynDVI_BadLine
+	CP	#0D
+	JR	Z,SynDVI_BadLine
+	CP	#0A
+	JR	Z,SynDVI_BadLine
+	CP	'='
+	JR	Z,SynDVI_FoundEq
+	INC	HL
+	JR	SynDVI_SeekEq
+SynDVI_BadLine:
+	POP	HL
+	JR	SynDVI_SkipLine
+SynDVI_FoundEq:
+	INC	HL
+	CALL	SynExtInCsvList
+	JR	NZ,SynDVI_NoMatch
+	POP	HL				; HL = start of profile name
+	CALL	SynCopyProfileName		; copy to SynProfileName
+	LD	A,#01
+	RET
+SynDVI_NoMatch:
+	POP	HL
+SynDVI_SkipLine:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynDVI_NotFound
+	CP	#0D
+	JR	Z,SynDVI_NextLine
+	CP	#0A
+	JR	Z,SynDVI_NextLine
+	INC	HL
+	JR	SynDVI_SkipLine
+SynDVI_NextLine:
+	INC	HL
+	JR	SynDVI_LineLp
+SynDVI_NotFound:
+	XOR	A
+	RET
+
+; Build SynProfileName = "<ext>.syn" from the extension pointer at DE.
+; DE must be non-zero. Lowercases the extension so matching against a
+; filesystem stored as .SYN still works on case-sensitive setups.
+SynBuildExtProfileName:
+	LD	HL,SynProfileName
+	LD	B,#0F				; leave room for ".syn\0"
+SynBEP_Lp:
+	LD	A,B
+	OR	A
+	JR	Z,SynBEP_App
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynBEP_App
+	CP	'.'
+	JR	Z,SynBEP_App
+	CALL	SynToLower
+	LD	(HL),A
+	INC	HL
+	INC	DE
+	DEC	B
+	JR	SynBEP_Lp
+SynBEP_App:
+	LD	(HL),'.'
+	INC	HL
+	LD	(HL),'s'
+	INC	HL
+	LD	(HL),'y'
+	INC	HL
+	LD	(HL),'n'
+	INC	HL
+	LD	(HL),0
+	RET
+
+; Copy profile name at HL (terminated by '=', 0, CR, LF) to SynProfileName.
+; Null-terminates. Limits to buffer size.
+SynCopyProfileName:
+	LD	DE,SynProfileName
+	LD	B,#13				; 19 chars max (+ 1 for null = 20)
+SynCPN_Lp:
+	LD	A,B
+	OR	A
+	JR	Z,SynCPN_End
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynCPN_End
+	CP	'='
+	JR	Z,SynCPN_End
+	CP	#0D
+	JR	Z,SynCPN_End
+	CP	#0A
+	JR	Z,SynCPN_End
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DEC	B
+	JR	SynCPN_Lp
+SynCPN_End:
+	XOR	A
+	LD	(DE),A
+	RET
+
+; Check whether null-terminated string at DE matches any comma-separated
+; token in the list at HL. Tokens end at ',', 0, CR, or LF. Case-insensitive.
+; Out: Z if any token matches, NZ if no match. Preserves DE. HL advanced.
+SynExtInCsvList:
+SynECL_Tok:
+	PUSH	DE
+SynECL_Cmp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynECL_TokEnd
+	CP	','
+	JR	Z,SynECL_TokEnd
+	CP	#0D
+	JR	Z,SynECL_TokEnd
+	CP	#0A
+	JR	Z,SynECL_TokEnd
+	CALL	SynToLower
+	LD	B,A
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynECL_Mismatch
+	CALL	SynToLower
+	CP	B
+	JR	NZ,SynECL_Mismatch
+	INC	HL
+	INC	DE
+	JR	SynECL_Cmp
+SynECL_TokEnd:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynECL_Match
+SynECL_Mismatch:
+	POP	DE
+SynECL_Skip:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynECL_End
+	CP	#0D
+	JR	Z,SynECL_End
+	CP	#0A
+	JR	Z,SynECL_End
+	CP	','
+	JR	Z,SynECL_NextTok
+	INC	HL
+	JR	SynECL_Skip
+SynECL_NextTok:
+	INC	HL
+	JR	SynECL_Tok
+SynECL_Match:
+	POP	DE
+	XOR	A
+	RET
+SynECL_End:
+	LD	A,#01
+	OR	A
+	RET
+
+; Scan for SynLineCom1 / SynLineCom2 patterns in the current line and paint
+; from the match to end of line. If the profile declares a /*..*/ block
+; comment (SynHasBlockCom=1), delegate to SynComC which handles both the
+; "//" line comment and block state tracking.
 SynHighlightComments:
 	LD	A,(SynLang)
-	CP	#01
-	JR	Z,SynComC
-	CP	#02
-	JR	Z,SynComAsm
-	CP	#03
-	JR	Z,SynComBat
-	CP	#04
-	JR	Z,SynComMake
-	RET
-
-SynComAsm:
-	LD	A,';'
-	JP	SynPaintFromChar
-
-SynComMake:
-	LD	A,'#'
-	JP	SynPaintFromChar
-
-SynComBat:
-	LD	A,(SynLineLen)
-	LD	B,A
-	LD	HL,(SynWorkBuf)
-SynBatLp:
-	LD	A,B
 	OR	A
 	RET	Z
-	LD	A,(HL)
-	CP	':'
-	JR	NZ,SynBatRem
-	INC	HL
-	INC	HL
-	DEC	B
-	LD	A,B
+	LD	A,(SynHasBlockCom)
 	OR	A
-	RET	Z
-	LD	A,(HL)
-	CP	':'
-	JR	NZ,SynBatStepBack
-	DEC	HL
-	DEC	HL
-	INC	B
-	CALL	SynPaintToEnd
-	RET
-SynBatStepBack:
-	DEC	HL
-	DEC	HL
-	INC	B
-SynBatRem:
-	CALL	SynRemAtPos
-	JR	NC,SynBatPaint
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	SynBatLp
-SynBatPaint:
-	CALL	SynPaintToEnd
+	JR	NZ,SynComC
+	LD	HL,SynLineCom1
+	CALL	SynPaintFromStr
+	LD	HL,SynLineCom2
+	CALL	SynPaintFromStr
 	RET
 
 SynComC:
@@ -325,26 +443,6 @@ SynCCNext:
 	DEC	B
 	JR	SynCCLp
 
-SynPaintFromChar:
-	LD	C,A
-	LD	A,(SynLineLen)
-	LD	B,A
-	LD	HL,(SynWorkBuf)
-SynPFC0:
-	LD	A,B
-	OR	A
-	RET	Z
-	LD	A,(HL)
-	CP	C
-	JR	Z,SynPFC1
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	SynPFC0
-SynPFC1:
-	CALL	SynPaintToEnd
-	RET
-
 SynPaintToEnd:
 	LD	A,(TmpColC)
 	INC	HL
@@ -356,37 +454,61 @@ SynPTE0:
 	JR	NZ,SynPTE0
 	RET
 
-SynRemAtPos:
+; Scan SynWorkBuf for the first occurrence of the null-terminated pattern at
+; HL (1-3 chars typically). If found, paint TmpColC from the match position to
+; end of line via SynPaintToEnd. Case-insensitive. No-op on empty pattern.
+SynPaintFromStr:
 	LD	A,(HL)
-	CALL	SynToUpper
-	CP	'R'
-	JR	NZ,SynRemNo
-	INC	HL
-	INC	HL
-	LD	A,(HL)
-	CALL	SynToUpper
-	CP	'E'
-	JR	NZ,SynRemNoBack1
-	INC	HL
-	INC	HL
-	LD	A,(HL)
-	CALL	SynToUpper
-	CP	'M'
-	JR	NZ,SynRemNoBack2
-	DEC	HL
-	DEC	HL
-	DEC	HL
-	DEC	HL
 	OR	A
+	RET	Z
+	PUSH	IX
+	PUSH	HL
+	POP	IX
+	LD	A,(SynLineLen)
+	LD	B,A
+	OR	A
+	JR	Z,SynPFS_Exit
+	LD	HL,(SynWorkBuf)
+SynPFS_ScanLp:
+	PUSH	HL
+	PUSH	BC
+	LD	C,B
+	PUSH	IX
+	POP	DE
+SynPFS_MLp:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynPFS_Hit
+	LD	A,C
+	OR	A
+	JR	Z,SynPFS_Miss
+	LD	A,(DE)
+	CALL	SynToLower
+	LD	B,A
+	LD	A,(HL)
+	CALL	SynToLower
+	CP	B
+	JR	NZ,SynPFS_Miss
+	INC	HL
+	INC	HL
+	INC	DE
+	DEC	C
+	JR	SynPFS_MLp
+SynPFS_Miss:
+	POP	BC
+	POP	HL
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	NZ,SynPFS_ScanLp
+SynPFS_Exit:
+	POP	IX
 	RET
-SynRemNoBack2:
-	DEC	HL
-	DEC	HL
-SynRemNoBack1:
-	DEC	HL
-	DEC	HL
-SynRemNo:
-	SCF
+SynPFS_Hit:
+	POP	BC
+	POP	HL
+	CALL	SynPaintToEnd
+	POP	IX
 	RET
 
 SynHighlightKeywords:
@@ -745,9 +867,9 @@ SynFBCF:
 SynSeedBlockFromTop:
 	XOR	A
 	LD	(SynCBlockOpen),A
-	LD	A,(SynLang)
-	CP	#01
-	RET	NZ
+	LD	A,(SynHasBlockCom)
+	OR	A
+	RET	Z
 	LD	IX,#8040
 	LD	HL,(UpLinePg)
 	LD	A,H
@@ -829,13 +951,13 @@ SynSCStep:
 	JR	SynSCLp
 
 ; Seed SynCBlockOpen with state entering the cursor line (BegString).
-; Assumes SynLang already set; walks #8040 .. BegString.
+; Only runs for profiles that declare /*..*/ block comments. Walks #8040..BegString.
 SynSeedBlockAtCursor:
 	XOR	A
 	LD	(SynCBlockOpen),A
-	LD	A,(SynLang)
-	CP	#01
-	RET	NZ
+	LD	A,(SynHasBlockCom)
+	OR	A
+	RET	Z
 	LD	IX,#8040
 	LD	DE,(BegString)
 SynSBACLp:
@@ -853,60 +975,155 @@ SynSBACLp:
 	ADD	IX,BC
 	JR	SynSBACLp
 
+; Reload the profile if SynProfileName differs from SynLoadedProf.
 SynEnsureProfileLoaded:
-	LD	A,(SynLang)
-	LD	B,A
-	LD	A,(SynLoadedLang)
-	CP	B
+	LD	HL,SynProfileName
+	LD	DE,SynLoadedProf
+	CALL	SynStrEq
 	RET	Z
-	LD	A,B
-	LD	(SynLoadedLang),A
-	CALL	SynLoadProfileForLang
+	; Different profile — copy new name into SynLoadedProf and (re)load.
+	LD	HL,SynProfileName
+	LD	DE,SynLoadedProf
+	CALL	SynStrCopy20
+	CALL	SynLoadProfile
 	RET
 
-SynLoadProfileForLang:
-	LD	HL,SynKeywords1
+; Load the profile identified by SynProfileName. Clears all per-profile
+; state first so switching between profiles is clean.
+SynLoadProfile:
 	XOR	A
-	LD	(HL),A
-	LD	HL,SynKeywords2
-	LD	(HL),A
-	LD	A,(SynLang)
-	CP	#01
-	JR	NZ,SynLPNoDefC
-	LD	HL,SynCKeywords
-	LD	DE,SynKeywords1
-	CALL	SynCopyCsv
-SynLPNoDefC:
-	LD	A,(SynLang)
-	CP	#01
-	JR	Z,SynLP_C
-	CP	#02
-	JR	Z,SynLP_Asm
-	CP	#03
-	JR	Z,SynLP_Bat
-	CP	#04
-	JR	Z,SynLP_Make
-	RET
-SynLP_C:
-	LD	HL,SynPathC
-	JR	SynLP_Open
-SynLP_Asm:
-	LD	HL,SynPathAsm
-	JR	SynLP_Open
-SynLP_Bat:
-	LD	HL,SynPathBat
-	JR	SynLP_Open
-SynLP_Make:
-	LD	HL,SynPathMake
-SynLP_Open:
+	LD	(SynKeywords1),A
+	LD	(SynKeywords2),A
+	LD	(SynLineCom1),A
+	LD	(SynLineCom2),A
+	LD	(SynHasBlockCom),A
+	LD	(SynCaseSensitive),A
+	LD	A,(SynProfileName)
+	OR	A
+	RET	Z				; empty name — nothing to load
+	; Build SYNTAX\<name> into SynProfilePath.
+	LD	HL,SynDirPrefix
+	LD	DE,SynProfilePath
+	CALL	SynStrCopyZ
+	DEC	DE				; overwrite the null from prefix
+	LD	HL,SynProfileName
+	CALL	SynStrCopyZ
+	; Read the file.
+	LD	HL,SynFileBuf
+	LD	(SynLFDst),HL
+	LD	HL,#03F0
+	LD	(SynLFMax),HL
+	LD	HL,SynProfilePath
 	CALL	SynLoadFileToBuf
 	RET	C
 	CALL	SynParseProfileBuf
+	CALL	SynDetectBlockCom
 	RET
 
-; Load HL=<filename path> into SynFileBuf (null-terminated, up to 0x03F0 bytes).
+; Compare null-terminated strings at HL and DE. Z if equal, NZ if not.
+; Preserves HL, DE.
+SynStrEq:
+	PUSH	HL
+	PUSH	DE
+SynSE_Lp:
+	LD	A,(DE)
+	LD	B,A
+	LD	A,(HL)
+	CP	B
+	JR	NZ,SynSE_Ne
+	OR	A
+	JR	Z,SynSE_Eq
+	INC	HL
+	INC	DE
+	JR	SynSE_Lp
+SynSE_Eq:
+	POP	DE
+	POP	HL
+	XOR	A
+	RET
+SynSE_Ne:
+	POP	DE
+	POP	HL
+	LD	A,#01
+	OR	A
+	RET
+
+; Copy null-terminated string from HL to DE (including null).
+; On exit: HL, DE advanced past the null.
+SynStrCopyZ:
+SynSCZ_Lp:
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	NZ,SynSCZ_Lp
+	RET
+
+; Copy up to 20 bytes from HL to DE (SynProfileName size). Stops at null.
+SynStrCopy20:
+	LD	B,#14
+SynSC20_Lp:
+	LD	A,B
+	OR	A
+	JR	Z,SynSC20_End
+	LD	A,(HL)
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	Z,SynSC20_Ret
+	DEC	B
+	JR	SynSC20_Lp
+SynSC20_End:
+	XOR	A
+	LD	(DE),A
+SynSC20_Ret:
+	RET
+
+; Set SynHasBlockCom=1 iff SynLineCom2 contains exactly the two chars "/*".
+SynDetectBlockCom:
+	XOR	A
+	LD	(SynHasBlockCom),A
+	LD	HL,SynLineCom2
+	LD	A,(HL)
+	CP	'/'
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	CP	'*'
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	RET	NZ
+	LD	A,#01
+	LD	(SynHasBlockCom),A
+	RET
+
+; Load HL=<filename path> into (SynLFDst) for up to (SynLFMax) bytes,
+; null-terminating after actual bytes read. Wraps file I/O with a
+; CaptureDir/RestoreDir(LaunchPathBuf) pair so SYNTAX\*.SYN resolves
+; relative to the KODE.EXE launch directory regardless of where the
+; user has navigated. CF=0 on success, CF=1 on failure.
 SynLoadFileToBuf:
 	PUSH	IY
+	; Phase 1: page Dialog_Windows_PG2 into SLOT3, save current dir,
+	; ChDir to launch dir. Uses CaptureDir/RestoreDir/LaunchPathBuf/
+	; TempDirBuf which all live in Dialog_Windows_PG2.
+	IN	A,(SLOT3)
+	PUSH	AF
+	LD	A,(DialogPg2)
+	OUT	(SLOT3),A
+	PUSH	HL
+	LD	HL,TempDirBuf
+	CALL	CaptureDir
+	LD	HL,LaunchPathBuf
+	CALL	RestoreDir
+	POP	HL
+	POP	AF
+	OUT	(SLOT3),A
+	; Phase 2: enter DOS state and do file I/O.
 	IN	A,(SLOT0)
 	PUSH	AF
 	LD	A,(DOSpage)
@@ -919,13 +1136,13 @@ SynLoadFileToBuf:
 	RST	#10
 	JR	C,SynLFFail
 	LD	(SynProfHnd),A
-	LD	HL,SynFileBuf
-	LD	DE,#03F0
+	LD	HL,(SynLFDst)
+	LD	DE,(SynLFMax)
 	LD	A,(SynProfHnd)
 	LD	C,#13
 	RST	#10
 	JR	C,SynLFCloseFail
-	LD	HL,SynFileBuf
+	LD	HL,(SynLFDst)
 	ADD	HL,DE
 	XOR	A
 	LD	(HL),A
@@ -948,6 +1165,15 @@ SynLFTeardown:
 	OUT	(C),A
 	POP	AF
 	OUT	(SLOT0),A
+	; Phase 3: restore the user's original directory.
+	IN	A,(SLOT3)
+	PUSH	AF
+	LD	A,(DialogPg2)
+	OUT	(SLOT3),A
+	LD	HL,TempDirBuf
+	CALL	RestoreDir
+	POP	AF
+	OUT	(SLOT3),A
 	POP	IY
 	LD	A,(SynLFRet)
 	OR	A
@@ -992,8 +1218,27 @@ SynPPCS:
 	LD	DE,SynKeyCase
 	CALL	SynLineStartsWith
 	POP	HL
-	JR	NZ,SynPPSkip
+	JR	NZ,SynPPLC1
 	CALL	SynParseCaseSensitive
+	JR	SynPPSkip
+SynPPLC1:
+	; "line_comment=" — must check BEFORE "line_comment2=" since the
+	; 14-char prefix of that line wouldn't match "line_comment=" (the '=' at
+	; position 13 differs from '2'), so either order works.
+	PUSH	HL
+	LD	DE,SynKeyLC1
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPLC2
+	CALL	SynCopyValueLC1
+	JR	SynPPSkip
+SynPPLC2:
+	PUSH	HL
+	LD	DE,SynKeyLC2
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPSkip
+	CALL	SynCopyValueLC2
 SynPPSkip:
 	LD	A,(HL)
 	OR	A
@@ -1055,6 +1300,38 @@ SynCVC0:
 	INC	HL
 	JR	SynCVC0
 SynCVCEnd:
+	XOR	A
+	LD	(DE),A
+	RET
+
+SynCopyValueLC1:
+	LD	DE,SynLineCom1
+	JR	SynCopyValueLineCom
+SynCopyValueLC2:
+	LD	DE,SynLineCom2
+SynCopyValueLineCom:
+	PUSH	DE
+	CALL	SynSeekEq
+	POP	DE
+	RET	C
+	LD	B,#03				; up to 3 chars (+ 1 null = buffer of 4)
+SynCVL0:
+	LD	A,B
+	OR	A
+	JR	Z,SynCVLEnd
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynCVLEnd
+	CP	#0D
+	JR	Z,SynCVLEnd
+	CP	#0A
+	JR	Z,SynCVLEnd
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DEC	B
+	JR	SynCVL0
+SynCVLEnd:
 	XOR	A
 	LD	(DE),A
 	RET
@@ -1201,45 +1478,31 @@ SynTokenLen:	DEFB	#00
 SynKwColor:	DEFB	#00
 SynProfHnd:	DEFB	#00
 SynLFRet:	DEFB	#01
+SynIndexLoaded:	DEFB	#00		; 0=not attempted, 1=loaded ok, #FF=load failed
+SynLFDst:	DEFW	#0000		; destination buffer for SynLoadFileToBuf
+SynLFMax:	DEFW	#0000		; max bytes to read for SynLoadFileToBuf
+SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
+SynLineCom1:	DEFS	4,0		; line-comment pattern 1 (up to 3 chars + null)
+SynLineCom2:	DEFS	4,0		; line-comment pattern 2 (or "/*" block opener)
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
 SynWorkBuf:	DEFW	#0000
 SynKwPtr:	DEFW	#0000
+SynProfileName:	DEFS	20,0		; profile file name from INDEX.LST (e.g. "c.syn")
+SynLoadedProf:	DEFS	20,0		; cached name of profile currently loaded
+SynProfilePath:	DEFS	32,0		; constructed full path "SYNTAX\<name>"
 SynKeywords1:	DEFS	512,0
 SynKeywords2:	DEFS	256,0
 SynFileBuf:	DEFS	1024,0
+SynIndexBuf:	DEFS	384,0
 
-SynExtC:	DEFB	"c",0
-SynExtH:	DEFB	"h",0
-SynExtCpp:	DEFB	"cpp",0
-SynExtHpp:	DEFB	"hpp",0
-SynExtBat:	DEFB	"bat",0
-SynExtCmd:	DEFB	"cmd",0
-SynExtMk:	DEFB	"mk",0
-SynExtMak:	DEFB	"mak",0
-SynExtMake:	DEFB	"make",0
-SynExtAsm:	DEFB	"asm",0
-SynExtZ80:	DEFB	"z80",0
-SynExtZas:	DEFB	"zas",0
-SynExtTas:	DEFB	"tas",0
-SynExtInc:	DEFB	"inc",0
-SynExtS:	DEFB	"s",0
-
-SynNmMakefile:	DEFB	"makefile",0
-SynNmGnumake:	DEFB	"gnumakefile",0
-
-SynPathC:	DEFB	"SYNTAX\\C.SYN",0
-SynPathAsm:	DEFB	"SYNTAX\\ASM.SYN",0
-SynPathBat:	DEFB	"SYNTAX\\BAT.SYN",0
-SynPathMake:	DEFB	"SYNTAX\\MAKEFILE.SYN",0
+SynPathIndex:	DEFB	"SYNTAX\\INDEX.LST",0
+SynDirPrefix:	DEFB	"SYNTAX\\",0
 
 SynKeyKw1:	DEFB	"keywords=",0
 SynKeyKw2:	DEFB	"keywords2=",0
 SynKeyCase:	DEFB	"case_sensitive=",0
-
-SynCKeywords:
-	DEFB	"if,else,for,while,do,switch,case,default,break,continue,return,"
-	DEFB	"struct,enum,typedef,const,static,extern,volatile,unsigned,signed,"
-	DEFB	"int,char,long,short,float,double,void,sizeof,goto,register",0
+SynKeyLC1:	DEFB	"line_comment=",0
+SynKeyLC2:	DEFB	"line_comment2=",0
 
  _mCollectInfo_addEnd
