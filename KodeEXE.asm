@@ -192,14 +192,43 @@ exeLoader.Start:
 	LD	C,Dss.Close
 	RST	ToDSS					; Close file
 
-; Page Dialogwn2 so LaunchPathBuf/CaptureDir are reachable, then snapshot
-; the launch directory once. SaveSetUp will use this later to anchor the
-; settings file to a stable location (with PathCur save/restore around it),
-; so the editor's own file navigation can't push KODE.SET elsewhere.
+; Page Dialogwn2 so LaunchPathBuf is reachable, then snapshot the KODE.EXE
+; directory once via Dss.AppInfo sub-function 1 (returns EXE directory
+; regardless of caller's current dir). Fall back to CaptureDir for DSS
+; builds that don't support AppInfo. Strip the trailing '\' that AppInfo
+; returns, unless the path is just "X:\".
 	LD	A,(ModulesPages.Dialogwn2)
 	OUT	(SLOT3),A
 	LD	HL,LaunchPathBuf
+	LD	B,#01				; AppInfo sub-function 1: app path
+	LD	C,Dss.AppInfo
+	RST	ToDSS
+	JR	NC,LaunchPathGot
+	LD	HL,LaunchPathBuf
 	CALL	CaptureDir
+LaunchPathGot:
+	LD	HL,LaunchPathBuf
+LaunchStripLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,LaunchStripEnd
+	INC	HL
+	JR	LaunchStripLp
+LaunchStripEnd:
+	LD	DE,LaunchPathBuf
+	PUSH	HL
+	OR	A
+	SBC	HL,DE				; HL = length
+	LD	A,L
+	POP	HL
+	CP	#04
+	JR	C,LaunchPathOK			; length < 4 → keep "X:\\"
+	DEC	HL
+	LD	A,(HL)
+	CP	#5C
+	JR	NZ,LaunchPathOK
+	LD	(HL),#00			; drop trailing '\'
+LaunchPathOK:
 
 	LD	HL,SetupName
 	SUB	A
