@@ -27,6 +27,8 @@
 - Prefer small, targeted edits in the relevant module instead of restructuring the build or directory layout.
 - Preserve the existing uppercase/lowercase path conventions exactly; this project uses both `Build/` and `build/` with different roles.
 - When investigating behavior, start from the entry assemblers (`KODE_BIN.asm`, `KodeEXE.asm`) and then follow includes into the feature directories listed above.
+- Whenever you mention a label (function, variable, entry point), include its concrete hex address alongside — e.g. `SynLoadFileToBuf (#49DB)`, `WriteBlock (#76D4)`. Look the address up in `Build/KodeEXE.LST` after the latest build. Labels alone are not enough for debugger/breakpoint work.
+- When generating commit messages, do **not** add a `Co-Authored-By:` trailer or any other co-author attribution.
 
 ## Code style and editing rules
 - Match the existing Z80 style exactly:

@@ -258,8 +258,8 @@ SynBEP_Lp:
 	OR	A
 	JR	Z,SynBEP_App
 	LD	A,(DE)
-	OR	A
-	JR	Z,SynBEP_App
+	CP	#21				; stop on null, control chars, and space
+	JR	C,SynBEP_App
 	CP	'.'
 	JR	Z,SynBEP_App
 	CALL	SynToLower
@@ -1107,30 +1107,30 @@ SynDetectBlockCom:
 ; relative to the KODE.EXE launch directory regardless of where the
 ; user has navigated. CF=0 on success, CF=1 on failure.
 SynLoadFileToBuf:
+	LD	(SynRelPath),HL			; stash relative path before any paging
 	PUSH	IY
-	; Phase 1: page Dialog_Windows_PG2 into SLOT3, save current dir,
-	; ChDir to launch dir. Uses CaptureDir/RestoreDir/LaunchPathBuf/
-	; TempDirBuf which all live in Dialog_Windows_PG2.
+	; Page Dialog_Windows_PG2 into SLOT3 (so LaunchPathBuf/TempDirBuf are
+	; reachable) AND DOSpage into SLOT0 (so RST #10 hits the DSS dispatcher).
+	; CaptureDir/RestoreDir explicitly require DOSpage at SLOT0.
 	IN	A,(SLOT3)
 	PUSH	AF
 	LD	A,(DialogPg2)
 	OUT	(SLOT3),A
-	PUSH	HL
-	LD	HL,TempDirBuf
-	CALL	CaptureDir
-	LD	HL,LaunchPathBuf
-	CALL	RestoreDir
-	POP	HL
-	POP	AF
-	OUT	(SLOT3),A
-	; Phase 2: enter DOS state and do file I/O.
 	IN	A,(SLOT0)
 	PUSH	AF
 	LD	A,(DOSpage)
 	OUT	(SLOT0),A
 	LD	BC,#7FFD
 	LD	A,#10
-	OUT	(C),A
+	OUT	(C),A				; enable VG93
+	; Save user's current dir, ChDir to launch dir (DSS-page is in SLOT0
+	; now, so RST #10 inside CaptureDir/RestoreDir hits DSS dispatcher).
+	LD	HL,TempDirBuf
+	CALL	CaptureDir
+	LD	HL,LaunchPathBuf
+	CALL	RestoreDir
+	; File I/O with relative path (DSS now in launch dir).
+	LD	HL,(SynRelPath)
 	LD	A,#01
 	LD	C,#11
 	RST	#10
@@ -1160,18 +1160,15 @@ SynLFFail:
 	LD	A,#01
 	LD	(SynLFRet),A
 SynLFTeardown:
+	; Restore user's original directory while still in DOS state.
+	LD	HL,TempDirBuf
+	CALL	RestoreDir
+	; Disable VG93, restore SLOT0 and SLOT3.
 	LD	BC,#7FFD
 	XOR	A
 	OUT	(C),A
 	POP	AF
 	OUT	(SLOT0),A
-	; Phase 3: restore the user's original directory.
-	IN	A,(SLOT3)
-	PUSH	AF
-	LD	A,(DialogPg2)
-	OUT	(SLOT3),A
-	LD	HL,TempDirBuf
-	CALL	RestoreDir
 	POP	AF
 	OUT	(SLOT3),A
 	POP	IY
@@ -1481,6 +1478,7 @@ SynLFRet:	DEFB	#01
 SynIndexLoaded:	DEFB	#00		; 0=not attempted, 1=loaded ok, #FF=load failed
 SynLFDst:	DEFW	#0000		; destination buffer for SynLoadFileToBuf
 SynLFMax:	DEFW	#0000		; max bytes to read for SynLoadFileToBuf
+SynRelPath:	DEFW	#0000		; relative path saved across page swaps in SynLoadFileToBuf
 SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
 SynLineCom1:	DEFS	4,0		; line-comment pattern 1 (up to 3 chars + null)
 SynLineCom2:	DEFS	4,0		; line-comment pattern 2 (or "/*" block opener)

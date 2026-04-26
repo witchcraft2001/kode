@@ -193,10 +193,10 @@ exeLoader.Start:
 	RST	ToDSS					; Close file
 
 ; Page Dialogwn2 so LaunchPathBuf is reachable, then snapshot the KODE.EXE
-; directory once via Dss.AppInfo sub-function 1 (returns EXE directory
-; regardless of caller's current dir). Fall back to CaptureDir for DSS
-; builds that don't support AppInfo. Strip the trailing '\' that AppInfo
-; returns, unless the path is just "X:\".
+; directory once via Dss.AppInfo sub-function 1 (returns the EXE directory
+; with a trailing '\', e.g. "C:\KODE\"). Fall back to CaptureDir for DSS
+; builds that don't support AppInfo. The trailing '\' is required by Dss.ChDir
+; on this DSS revision, so leave it in place.
 	LD	A,(ModulesPages.Dialogwn2)
 	OUT	(SLOT3),A
 	LD	HL,LaunchPathBuf
@@ -207,28 +207,6 @@ exeLoader.Start:
 	LD	HL,LaunchPathBuf
 	CALL	CaptureDir
 LaunchPathGot:
-	LD	HL,LaunchPathBuf
-LaunchStripLp:
-	LD	A,(HL)
-	OR	A
-	JR	Z,LaunchStripEnd
-	INC	HL
-	JR	LaunchStripLp
-LaunchStripEnd:
-	LD	DE,LaunchPathBuf
-	PUSH	HL
-	OR	A
-	SBC	HL,DE				; HL = length
-	LD	A,L
-	POP	HL
-	CP	#04
-	JR	C,LaunchPathOK			; length < 4 → keep "X:\\"
-	DEC	HL
-	LD	A,(HL)
-	CP	#5C
-	JR	NZ,LaunchPathOK
-	LD	(HL),#00			; drop trailing '\'
-LaunchPathOK:
 
 	LD	HL,SetupName
 	SUB	A
