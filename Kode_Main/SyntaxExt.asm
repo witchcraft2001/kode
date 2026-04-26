@@ -581,8 +581,8 @@ SynKWNext:
 	DEC	B
 	JR	SynKWLp
 
-; Paint brackets ()[]<> with TmpColB — only on chars still at SynBaseColor
-; so we don't overpaint comments or strings.
+; Paint bracket characters listed in SynBrackets with TmpColB — only on
+; chars still at SynBaseColor so we don't overpaint comments or strings.
 SynHighlightBrackets:
 	LD	A,(SynLineLen)
 	OR	A
@@ -598,20 +598,27 @@ SynHBLp:
 	CP	C
 	JR	NZ,SynHBNext
 	LD	A,(HL)
-	CP	'('
-	JR	Z,SynHBPaint
-	CP	')'
-	JR	Z,SynHBPaint
-	CP	'['
-	JR	Z,SynHBPaint
-	CP	']'
-	JR	Z,SynHBPaint
-	CP	'<'
-	JR	Z,SynHBPaint
-	CP	'>'
-	JR	Z,SynHBPaint
+	; Linear search through SynBrackets ASCIIZ list. Tiny list (<=7 chars)
+	; so a per-char loop is simpler than a lookup table.
+	PUSH	HL
+	PUSH	BC
+	LD	C,A
+	LD	HL,SynBrackets
+SynHBSc:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynHBNoMatch
+	CP	C
+	JR	Z,SynHBMatch
+	INC	HL
+	JR	SynHBSc
+SynHBNoMatch:
+	POP	BC
+	POP	HL
 	JR	SynHBNext
-SynHBPaint:
+SynHBMatch:
+	POP	BC
+	POP	HL
 	INC	HL
 	LD	A,(TmpColB)
 	LD	(HL),A
@@ -998,6 +1005,10 @@ SynLoadProfile:
 	LD	(SynLineCom2),A
 	LD	(SynHasBlockCom),A
 	LD	(SynCaseSensitive),A
+	; Default brackets = "()[]" if profile doesn't specify brackets= line.
+	LD	HL,SynBracketsDefault
+	LD	DE,SynBrackets
+	CALL	SynStrCopyZ
 	LD	A,(SynProfileName)
 	OR	A
 	RET	Z				; empty name — nothing to load
@@ -1234,8 +1245,16 @@ SynPPLC2:
 	LD	DE,SynKeyLC2
 	CALL	SynLineStartsWith
 	POP	HL
-	JR	NZ,SynPPSkip
+	JR	NZ,SynPPBR
 	CALL	SynCopyValueLC2
+	JR	SynPPSkip
+SynPPBR:
+	PUSH	HL
+	LD	DE,SynKeyBrackets
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPSkip
+	CALL	SynCopyValueBrackets
 SynPPSkip:
 	LD	A,(HL)
 	OR	A
@@ -1329,6 +1348,35 @@ SynCVL0:
 	DEC	B
 	JR	SynCVL0
 SynCVLEnd:
+	XOR	A
+	LD	(DE),A
+	RET
+
+; Parse "brackets=..." value (up to 7 chars) into SynBrackets buffer.
+SynCopyValueBrackets:
+	LD	DE,SynBrackets
+	PUSH	DE
+	CALL	SynSeekEq
+	POP	DE
+	RET	C
+	LD	B,#07				; up to 7 bracket chars (+ 1 null = buffer of 8)
+SynCVB0:
+	LD	A,B
+	OR	A
+	JR	Z,SynCVBEnd
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynCVBEnd
+	CP	#0D
+	JR	Z,SynCVBEnd
+	CP	#0A
+	JR	Z,SynCVBEnd
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DEC	B
+	JR	SynCVB0
+SynCVBEnd:
 	XOR	A
 	LD	(DE),A
 	RET
@@ -1482,6 +1530,7 @@ SynRelPath:	DEFW	#0000		; relative path saved across page swaps in SynLoadFileTo
 SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
 SynLineCom1:	DEFS	4,0		; line-comment pattern 1 (up to 3 chars + null)
 SynLineCom2:	DEFS	4,0		; line-comment pattern 2 (or "/*" block opener)
+SynBrackets:	DEFS	8,0		; bracket chars to highlight (up to 7 + null)
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
 SynWorkBuf:	DEFW	#0000
@@ -1502,5 +1551,7 @@ SynKeyKw2:	DEFB	"keywords2=",0
 SynKeyCase:	DEFB	"case_sensitive=",0
 SynKeyLC1:	DEFB	"line_comment=",0
 SynKeyLC2:	DEFB	"line_comment2=",0
+SynKeyBrackets:	DEFB	"brackets=",0
+SynBracketsDefault:	DEFB	"()[]",0
 
  _mCollectInfo_addEnd
