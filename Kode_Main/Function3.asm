@@ -1026,6 +1026,15 @@ EditOp4A:
 	LD	(CSMnemon),A
 	LD	A,B
 	LD	(CSComment),A
+	LD	A,(ColBrace)
+	LD	B,A
+	LD	A,(SynHghLght)
+	OR	A
+	LD	A,B
+	JR	NZ,EditOpBR
+	LD	A,(ColTxtWin)
+EditOpBR:
+	LD	(CSBrace),A
 	CALL	ResCurs
 RefrScr:
 	LD	IX,TxtWtab  ; Table window descriptors
@@ -1141,6 +1150,10 @@ Colors1:
 	AND	C
 	OR	B
 	LD	(ColComment),A
+	LD	A,(ColBrace)
+	AND	C
+	OR	B
+	LD	(ColBrace),A
 	LD	A,(ColLabel)
 	LD	E,A
 	LD	A,(ColMnemon)
@@ -1161,6 +1174,15 @@ Color1:
 	LD	(CSMnemon),A
 	LD	A,B
 	LD	(CSComment),A
+	LD	A,(ColBrace)
+	LD	B,A
+	LD	A,(SynHghLght)
+	OR	A
+	LD	A,B
+	JR	NZ,ColorBR
+	LD	A,(ColTxtWin)
+ColorBR:
+	LD	(CSBrace),A
 	LD	IX,TxtWtab  ; Table window descriptors
 	BIT	7,(IX+#00)
 	JP	NZ,InitDeskTop

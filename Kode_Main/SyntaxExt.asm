@@ -1397,14 +1397,14 @@ SynCVLEnd:
 	LD	(DE),A
 	RET
 
-; Parse "brackets=..." value (up to 7 chars) into SynBrackets buffer.
+; Parse "brackets=..." value (up to 11 chars) into SynBrackets buffer.
 SynCopyValueBrackets:
 	LD	DE,SynBrackets
 	PUSH	DE
 	CALL	SynSeekEq
 	POP	DE
 	RET	C
-	LD	B,#07				; up to 7 bracket chars (+ 1 null = buffer of 8)
+	LD	B,#0B				; up to 11 bracket chars (+ 1 null = buffer of 12)
 SynCVB0:
 	LD	A,B
 	OR	A
@@ -1575,7 +1575,7 @@ SynRelPath:	DEFW	#0000		; relative path saved across page swaps in SynLoadFileTo
 SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
 SynLineCom1:	DEFS	4,0		; line-comment pattern 1 (up to 3 chars + null)
 SynLineCom2:	DEFS	4,0		; line-comment pattern 2 (or "/*" block opener)
-SynBrackets:	DEFS	8,0		; bracket chars to highlight (up to 7 + null)
+SynBrackets:	DEFS	12,0		; bracket chars to highlight (up to 11 + null)
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
 SynWorkBuf:	DEFW	#0000

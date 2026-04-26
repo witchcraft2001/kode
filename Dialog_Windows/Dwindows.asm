@@ -472,9 +472,10 @@ ItemList4
 	DEFB	"Frame (unsel)",#0D
 	DEFB	0
 ItemList5
-	DEFB	"Z80 mnemoic",#0D
-	DEFB	"Labels",#0D
+	DEFB	"Keywords",#0D
+	DEFB	"Keywords 2",#0D
 	DEFB	"Comments",#0D
+	DEFB	"Brackets",#0D
 	DEFB	0
 ItemList6
 	DEFB	"Window atr",#0D
@@ -493,7 +494,7 @@ ColList3
 ColList4
 	DEFS	8,0
 ColList5
-	DEFS	6,0
+	DEFS	8,0
 ColList6
 	DEFS	10,0
 ; []===========================================================[]; !TODO window (position text)

@@ -444,12 +444,19 @@ InitT
 	DEFW	ColHiddFr
 	DEFB	0
 InitS
-	DEFB	"Z",#18,#10,"MNEMONIC",0
+	DEFB	"Z",#18,#10,"KEYWORDS",0
 	DEFW	ColMnemon
-	DEFB	"LABELS",0
+	DEFB	"KEYWORDS2",0
 	DEFW	ColLabel
 	DEFB	"COMMENTS",0
 	DEFW	ColComment
+	DEFB	"BRACKETS",0
+	DEFW	ColBrace
+	; Legacy aliases — let .set files written before the rename still load.
+	DEFB	"MNEMONIC",0
+	DEFW	ColMnemon
+	DEFB	"LABELS",0
+	DEFW	ColLabel
 	DEFB	0
 InitM
 	DEFB	"WINDOWSATTRIBUTS",0
@@ -763,14 +770,17 @@ SetupLst
 	DEFW	ColHiddFr
 	DEFB	#0D,#0A
 	DEFB	#0D,#0A
-	DEFB	"     sZ80mnemonic=",0,1
+	DEFB	"     sKeywords=",0,1
 	DEFW	ColMnemon
 	DEFB	#0D,#0A
-	DEFB	"     sLabels=",0,1
+	DEFB	"     sKeywords2=",0,1
 	DEFW	ColLabel
 	DEFB	#0D,#0A
 	DEFB	"     sComments=",0,1
 	DEFW	ColComment
+	DEFB	#0D,#0A
+	DEFB	"     sBrackets=",0,1
+	DEFW	ColBrace
 	DEFB	#0D,#0A
 	DEFB	#0D,#0A
 	DEFB	"     mWindowsAttributs=",0,1
