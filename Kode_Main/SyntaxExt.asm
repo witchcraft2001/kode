@@ -705,13 +705,9 @@ SynWCmpL:
 	JR	Z,SynWNoPop
 	CP	' '
 	JR	Z,SynWNoPop
-	LD	B,A
-	LD	A,(SynCaseSensitive)
-	OR	A
-	LD	A,B
-	JR	NZ,SynWCmpKeep
-	CALL	SynToLower
-SynWCmpKeep:
+	; Both list bytes and the SynToken bytes are already in matching case
+	; (lowered at profile load time when case-insensitive, kept as-is when
+	; case-sensitive), so a direct compare is enough.
 	CP	(HL)
 	JR	NZ,SynWNoPop
 	INC	DE
@@ -1029,7 +1025,28 @@ SynLoadProfile:
 	RET	C
 	CALL	SynParseProfileBuf
 	CALL	SynDetectBlockCom
+	; If case-insensitive, pre-lower the keyword buffers once so that the
+	; runtime compare in SynWordInList is a plain CP (HL) without per-char
+	; SynToLower overhead. SynToken is already lowered in SynCollectWord.
+	LD	A,(SynCaseSensitive)
+	OR	A
+	RET	NZ
+	LD	HL,SynKeywords1
+	CALL	SynLowerCsv
+	LD	HL,SynKeywords2
+	CALL	SynLowerCsv
 	RET
+
+; Lowercase every byte of an ASCIIZ string in place. ',' and other
+; separators stay as-is because SynToLower is a no-op on non-letters.
+SynLowerCsv:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CALL	SynToLower
+	LD	(HL),A
+	INC	HL
+	JR	SynLowerCsv
 
 ; Compare null-terminated strings at HL and DE. Z if equal, NZ if not.
 ; Preserves HL, DE.
