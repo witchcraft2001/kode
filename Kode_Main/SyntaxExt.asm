@@ -1293,17 +1293,62 @@ SynLSWNo:
 	OR	A
 	RET
 
+; SynCopyValueKw1/Kw2: append the keyword= value at HL to the kw buffer.
+; Multiple "keywords=" lines accumulate into one CSV (we insert a comma
+; separator before each subsequent value). BC = one-past-last byte allowed
+; for keyword data; we always reserve one trailing slot for the null
+; terminator so DE can stop at BC-1 safely.
 SynCopyValueKw1:
 	LD	DE,SynKeywords1
+	LD	BC,SynKeywords1+512
 	JR	SynCopyValueCommon
 SynCopyValueKw2:
 	LD	DE,SynKeywords2
+	LD	BC,SynKeywords2+256
 SynCopyValueCommon:
+	; If buffer non-empty, advance DE to its null terminator and overwrite
+	; the null with a separator before appending.
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynCVCSeek			; empty → no separator
+SynCVCFindEnd:
+	INC	DE
+	LD	A,(DE)
+	OR	A
+	JR	NZ,SynCVCFindEnd
+	; DE = current null. Check we have room for ',' + at least one char + null.
+	PUSH	HL
 	PUSH	DE
-	CALL	SynSeekEq
+	INC	DE
+	INC	DE
+	OR	A
+	SBC	HL,HL				; HL = 0
+	ADD	HL,DE
+	OR	A
+	SBC	HL,BC
 	POP	DE
-	RET	C
+	POP	HL
+	JR	NC,SynCVCEnd			; no room — abort with current null intact
+	LD	A,','
+	LD	(DE),A
+	INC	DE
+SynCVCSeek:
+	PUSH	DE
+	PUSH	BC
+	CALL	SynSeekEq
+	POP	BC
+	POP	DE
+	JR	C,SynCVCEnd			; no '=' on line → terminate
 SynCVC0:
+	; Overflow check: DE must be < BC-1 (reserve last byte for null).
+	PUSH	HL
+	LD	H,B
+	LD	L,C
+	DEC	HL				; HL = BC - 1
+	OR	A
+	SBC	HL,DE				; CF set if HL < DE → no room
+	POP	HL
+	JR	C,SynCVCEnd
 	LD	A,(HL)
 	OR	A
 	JR	Z,SynCVCEnd
