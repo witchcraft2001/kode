@@ -1035,6 +1035,24 @@ EditOp4A:
 	LD	A,(ColTxtWin)
 EditOpBR:
 	LD	(CSBrace),A
+	LD	A,(ColString)
+	LD	B,A
+	LD	A,(SynHghLght)
+	OR	A
+	LD	A,B
+	JR	NZ,EditOpST
+	LD	A,(ColTxtWin)
+EditOpST:
+	LD	(CSString),A
+	LD	A,(ColNumber)
+	LD	B,A
+	LD	A,(SynHghLght)
+	OR	A
+	LD	A,B
+	JR	NZ,EditOpNM
+	LD	A,(ColTxtWin)
+EditOpNM:
+	LD	(CSNumber),A
 	CALL	ResCurs
 RefrScr:
 	LD	IX,TxtWtab  ; Table window descriptors
@@ -1154,6 +1172,14 @@ Colors1:
 	AND	C
 	OR	B
 	LD	(ColBrace),A
+	LD	A,(ColString)
+	AND	C
+	OR	B
+	LD	(ColString),A
+	LD	A,(ColNumber)
+	AND	C
+	OR	B
+	LD	(ColNumber),A
 	LD	A,(ColLabel)
 	LD	E,A
 	LD	A,(ColMnemon)
@@ -1183,6 +1209,24 @@ Color1:
 	LD	A,(ColTxtWin)
 ColorBR:
 	LD	(CSBrace),A
+	LD	A,(ColString)
+	LD	B,A
+	LD	A,(SynHghLght)
+	OR	A
+	LD	A,B
+	JR	NZ,ColorST
+	LD	A,(ColTxtWin)
+ColorST:
+	LD	(CSString),A
+	LD	A,(ColNumber)
+	LD	B,A
+	LD	A,(SynHghLght)
+	OR	A
+	LD	A,B
+	JR	NZ,ColorNM
+	LD	A,(ColTxtWin)
+ColorNM:
+	LD	(CSNumber),A
 	LD	IX,TxtWtab  ; Table window descriptors
 	BIT	7,(IX+#00)
 	JP	NZ,InitDeskTop

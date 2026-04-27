@@ -476,6 +476,8 @@ ItemList5
 	DEFB	"Keywords 2",#0D
 	DEFB	"Comments",#0D
 	DEFB	"Brackets",#0D
+	DEFB	"Strings",#0D
+	DEFB	"Numbers",#0D
 	DEFB	0
 ItemList6
 	DEFB	"Window atr",#0D
@@ -494,7 +496,7 @@ ColList3
 ColList4
 	DEFS	8,0
 ColList5
-	DEFS	8,0
+	DEFS	12,0
 ColList6
 	DEFS	10,0
 ; []===========================================================[]; !TODO window (position text)

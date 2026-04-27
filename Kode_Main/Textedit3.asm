@@ -1343,10 +1343,14 @@ TmpColM:		DEFB	#00
 TmpColW:		DEFB	#00
 TmpColC:		DEFB	#00
 TmpColB:		DEFB	#00
+TmpColS:		DEFB	#00
+TmpColN:		DEFB	#00
 CSLabel:		DEFB	#1E
 CSMnemon:		DEFB	#1F
 CSComment:	DEFB	#1D
 CSBrace:	DEFB	#1B
+CSString:	DEFB	#1A
+CSNumber:	DEFB	#19
 
 PrintS:	CALL	ResCurs
 	IN	A,(SLOT3)

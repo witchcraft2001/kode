@@ -365,10 +365,12 @@ ColMoveFr:      BYTE	#0A,#0F		; Color move/resize window
 ColHiddFr:      BYTE	#08,#0F		; Color no select window
 
 ; [syntaxis]
-ColMnemon:      BYTE	#1F,#0F		; Color z80 mnemonics
-ColLabel:               BYTE	#1E,#0F		; Color labels
+ColMnemon:      BYTE	#1F,#0F		; Color keywords (primary)
+ColLabel:               BYTE	#1E,#0F		; Color keywords 2 (secondary)
 ColComment:     BYTE	#1D,#0F		; Color comments
 ColBrace:       BYTE	#1B,#0F		; Color brackets ()[]<>
+ColString:      BYTE	#1A,#0F		; Color string literals
+ColNumber:      BYTE	#19,#0F		; Color numeric literals
 
 ; [miscel]
 ColWindAtr:     BYTE	#0A,#0F		; Color close button,zoom button

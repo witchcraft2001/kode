@@ -66,7 +66,9 @@ SynExtRDet:
 SynExtRun:
 	CALL	SynHighlightComments
 	CALL	SynEnsureProfileLoaded
+	CALL	SynHighlightStrings
 	CALL	SynHighlightKeywords
+	CALL	SynHighlightNumbers
 	CALL	SynHighlightBrackets
 	RET
 
@@ -79,6 +81,10 @@ SynSetupLineColors:
 	LD	(TmpColL),A
 	LD	A,(CSBrace)
 	LD	(TmpColB),A
+	LD	A,(CSString)
+	LD	(TmpColS),A
+	LD	A,(CSNumber)
+	LD	(TmpColN),A
 	LD	A,(ColTxtWin)
 	LD	HL,SynLineAttr
 	BIT	6,(HL)
@@ -89,6 +95,8 @@ SynSLSel:
 	LD	(TmpColM),A
 	LD	(TmpColL),A
 	LD	(TmpColB),A
+	LD	(TmpColS),A
+	LD	(TmpColN),A
 SynSLC0:
 	LD	(SynBaseColor),A
 	LD	C,A
@@ -168,7 +176,7 @@ SynLoadIndexIfNeeded:
 	RET	NZ
 	LD	DE,SynIndexBuf
 	LD	(SynLFDst),DE
-	LD	DE,#017F
+	LD	DE,#00FF			; SynIndexBuf is 256 bytes; reserve 1 for null
 	LD	(SynLFMax),DE
 	LD	HL,SynPathIndex
 	CALL	SynLoadFileToBuf
@@ -581,6 +589,134 @@ SynKWNext:
 	DEC	B
 	JR	SynKWLp
 
+; Paint string literals delimited by characters listed in SynStringDelims
+; (e.g. " or '). Only the OPENING delimiter is required to be at base
+; color (so we never start a string inside a comment); inside the string
+; we paint unconditionally, so the string can span chars that other passes
+; might have touched.
+SynHighlightStrings:
+	LD	A,(SynStringDelims)
+	OR	A
+	RET	Z				; no delims configured for this profile
+	LD	A,(SynLineLen)
+	OR	A
+	RET	Z
+	LD	B,A				; B = remaining char-pairs to scan
+	LD	HL,(SynWorkBuf)
+SynHSScanCh:
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	C,A				; C = current attribute
+	LD	A,(SynBaseColor)
+	CP	C
+	JR	NZ,SynHSSkipCh			; not at base — skip this char
+	LD	A,(HL)				; current char
+	LD	C,A
+	PUSH	HL
+	LD	HL,SynStringDelims
+SynHSDelimLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynHSNoDelim
+	CP	C
+	JR	Z,SynHSStart
+	INC	HL
+	JR	SynHSDelimLp
+SynHSNoDelim:
+	POP	HL
+	JR	SynHSSkipCh
+SynHSStart:
+	POP	HL				; HL → opening delim char
+	; C = the matched delim character (used as closing delim)
+	INC	HL
+	LD	A,(TmpColS)
+	LD	(HL),A
+	DEC	HL
+	INC	HL
+	INC	HL
+	DEC	B
+	RET	Z
+SynHSInside:
+	LD	A,(HL)
+	CP	C
+	JR	Z,SynHSClose
+	INC	HL
+	LD	A,(TmpColS)
+	LD	(HL),A
+	DEC	HL
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	NZ,SynHSInside
+	RET					; ran off line without close — leave as is
+SynHSClose:
+	INC	HL
+	LD	A,(TmpColS)
+	LD	(HL),A
+	DEC	HL
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	NZ,SynHSScanCh
+	RET
+SynHSSkipCh:
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	NZ,SynHSScanCh
+	RET
+
+; Paint numeric literals — sequences that start with a digit and continue
+; with word chars (digits/letters/'_') — with TmpColN. Only paints chars
+; still at SynBaseColor so we don't overpaint earlier passes.
+SynHighlightNumbers:
+	LD	A,(SynLineLen)
+	OR	A
+	RET	Z
+	LD	B,A
+	LD	HL,(SynWorkBuf)
+SynHNScan:
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	C,A
+	LD	A,(SynBaseColor)
+	CP	C
+	JR	NZ,SynHNNextCh
+	LD	A,(HL)
+	CP	'0'
+	JR	C,SynHNNextCh
+	CP	'9'+1
+	JR	NC,SynHNNextCh
+	; digit at base color — start of numeric token
+SynHNTok:
+	INC	HL
+	LD	A,(TmpColN)
+	LD	(HL),A
+	DEC	HL
+	INC	HL
+	INC	HL
+	DEC	B
+	RET	Z
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	C,A
+	LD	A,(SynBaseColor)
+	CP	C
+	JR	NZ,SynHNScan			; next pos already painted — token ends
+	LD	A,(HL)
+	CALL	SynIsWordChar
+	JR	NC,SynHNTok			; word char (digit/letter/_) — keep painting
+	JR	SynHNScan			; non-word — token ends, continue scan
+SynHNNextCh:
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	NZ,SynHNScan
+	RET
+
 ; Paint bracket characters listed in SynBrackets with TmpColB — only on
 ; chars still at SynBaseColor so we don't overpaint comments or strings.
 SynHighlightBrackets:
@@ -978,17 +1114,60 @@ SynSBACLp:
 	ADD	IX,BC
 	JR	SynSBACLp
 
-; Reload the profile if SynProfileName differs from SynLoadedProf.
+; 2-slot LRU cache: profile data in the "active" slot is what runtime code
+; reads (SynKeywords1, SynLineCom1, etc.). A second "backup" slot mirrors
+; the same fields but at different addresses (SynKw1Bk, SynLC1Bk, ...).
+; When the user toggles between two profiles (e.g. C window <-> ASM window)
+; we just byte-swap the two slots instead of going to disk.
 SynEnsureProfileLoaded:
 	LD	HL,SynProfileName
 	LD	DE,SynLoadedProf
 	CALL	SynStrEq
-	RET	Z
-	; Different profile — copy new name into SynLoadedProf and (re)load.
+	RET	Z				; already active — nothing to do
+	; Active profile changes from here. Invalidate the per-render-pass
+	; language cache so the next paint re-detects via SynDetectLang
+	; instead of reusing the previous window's value.
+	XOR	A
+	LD	(SynRenderLangValid),A
+	; Check the backup slot.
+	LD	HL,SynProfileName
+	LD	DE,SynLoadedProfBk
+	CALL	SynStrEq
+	JR	NZ,SynEPL_Fresh
+	; Wanted profile sits in backup — swap with active, no disk I/O.
+	CALL	SynSwapSlots
+	RET
+SynEPL_Fresh:
+	; Wanted profile is in neither slot. Move whatever active was into
+	; backup (becoming the LRU cache entry), then load the new one fresh
+	; into active.
+	CALL	SynSwapSlots
 	LD	HL,SynProfileName
 	LD	DE,SynLoadedProf
 	CALL	SynStrCopy20
 	CALL	SynLoadProfile
+	RET
+
+; Byte-swap the active and backup slots in place. Used to move a cached
+; profile into the active position (or push the active one out to backup
+; before loading a new one).
+SynSwapSlots:
+	LD	HL,SynLoadedProf
+	LD	DE,SynLoadedProfBk
+	LD	BC,SynSlotTotalBytes
+SynSwapLp:
+	LD	A,(DE)
+	LD	(SynSwapTmp),A
+	LD	A,(HL)
+	LD	(DE),A
+	LD	A,(SynSwapTmp)
+	LD	(HL),A
+	INC	HL
+	INC	DE
+	DEC	BC
+	LD	A,B
+	OR	C
+	JR	NZ,SynSwapLp
 	RET
 
 ; Load the profile identified by SynProfileName. Clears all per-profile
@@ -1001,6 +1180,7 @@ SynLoadProfile:
 	LD	(SynLineCom2),A
 	LD	(SynHasBlockCom),A
 	LD	(SynCaseSensitive),A
+	LD	(SynStringDelims),A		; default: no string highlighting
 	; Default brackets = "()[]" if profile doesn't specify brackets= line.
 	LD	HL,SynBracketsDefault
 	LD	DE,SynBrackets
@@ -1018,7 +1198,7 @@ SynLoadProfile:
 	; Read the file.
 	LD	HL,SynFileBuf
 	LD	(SynLFDst),HL
-	LD	HL,#03F0
+	LD	HL,#027F			; SynFileBuf is 640 bytes; reserve 1 for null
 	LD	(SynLFMax),HL
 	LD	HL,SynProfilePath
 	CALL	SynLoadFileToBuf
@@ -1216,9 +1396,9 @@ SynPPLine:
 	OR	A
 	RET	Z
 	CP	#0D
-	JR	Z,SynPPNext
+	JP	Z,SynPPNext
 	CP	#0A
-	JR	Z,SynPPNext
+	JP	Z,SynPPNext
 	CP	';'
 	JR	Z,SynPPSkip
 	CP	'#'
@@ -1270,8 +1450,16 @@ SynPPBR:
 	LD	DE,SynKeyBrackets
 	CALL	SynLineStartsWith
 	POP	HL
-	JR	NZ,SynPPSkip
+	JR	NZ,SynPPSD
 	CALL	SynCopyValueBrackets
+	JR	SynPPSkip
+SynPPSD:
+	PUSH	HL
+	LD	DE,SynKeyStringDelims
+	CALL	SynLineStartsWith
+	POP	HL
+	JR	NZ,SynPPSkip
+	CALL	SynCopyValueStringDelims
 SynPPSkip:
 	LD	A,(HL)
 	OR	A
@@ -1284,7 +1472,7 @@ SynPPSkip:
 	JR	SynPPSkip
 SynPPNext:
 	INC	HL
-	JR	SynPPLine
+	JP	SynPPLine
 
 SynLineStartsWith:
 	PUSH	HL
@@ -1410,6 +1598,35 @@ SynCVL0:
 	DEC	B
 	JR	SynCVL0
 SynCVLEnd:
+	XOR	A
+	LD	(DE),A
+	RET
+
+; Parse "string_delims=..." value (up to 3 chars) into SynStringDelims.
+SynCopyValueStringDelims:
+	LD	DE,SynStringDelims
+	PUSH	DE
+	CALL	SynSeekEq
+	POP	DE
+	RET	C
+	LD	B,#03				; up to 3 delimiter chars
+SynCVS0:
+	LD	A,B
+	OR	A
+	JR	Z,SynCVSEnd
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynCVSEnd
+	CP	#0D
+	JR	Z,SynCVSEnd
+	CP	#0A
+	JR	Z,SynCVSEnd
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	DEC	B
+	JR	SynCVS0
+SynCVSEnd:
 	XOR	A
 	LD	(DE),A
 	RET
@@ -1578,7 +1795,6 @@ SynCBlockOpen:	DEFB	#00
 SynRenderPass:	DEFB	#00
 SynRenderLangValid:	DEFB	#00
 SynRenderLang:	DEFB	#00
-SynCaseSensitive:	DEFB	#00
 SynLineLen:	DEFB	#00
 SynLineAttr:	DEFB	#00
 SynTokenLen:	DEFB	#00
@@ -1589,21 +1805,47 @@ SynIndexLoaded:	DEFB	#00		; 0=not attempted, 1=loaded ok, #FF=load failed
 SynLFDst:	DEFW	#0000		; destination buffer for SynLoadFileToBuf
 SynLFMax:	DEFW	#0000		; max bytes to read for SynLoadFileToBuf
 SynRelPath:	DEFW	#0000		; relative path saved across page swaps in SynLoadFileToBuf
-SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
-SynLineCom1:	DEFS	4,0		; line-comment pattern 1 (up to 3 chars + null)
-SynLineCom2:	DEFS	4,0		; line-comment pattern 2 (or "/*" block opener)
-SynBrackets:	DEFS	12,0		; bracket chars to highlight (up to 11 + null)
+SynSwapTmp:	DEFB	#00		; one-byte scratch used by SynSwapSlots
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
 SynWorkBuf:	DEFW	#0000
 SynKwPtr:	DEFW	#0000
 SynProfileName:	DEFS	20,0		; profile file name from INDEX.LST (e.g. "c.syn")
-SynLoadedProf:	DEFS	20,0		; cached name of profile currently loaded
 SynProfilePath:	DEFS	32,0		; constructed full path "SYNTAX\<name>"
+
+; --- Active profile slot. Layout MUST match SynBackupSlot below; the two
+;     are byte-swapped wholesale by SynSwapSlots. Runtime code reads from
+;     these "active" addresses; backup slot is only manipulated by the
+;     swap routine.
+SynActiveSlot:
+SynLoadedProf:	DEFS	20,0		; cached name of profile currently loaded
+SynLineCom1:	DEFS	4,0		; line-comment pattern 1 (up to 3 chars + null)
+SynLineCom2:	DEFS	4,0		; line-comment pattern 2 (or "/*" block opener)
+SynBrackets:	DEFS	12,0		; bracket chars to highlight (up to 11 + null)
+SynStringDelims:	DEFS	4,0		; string-literal delimiter chars (up to 3 + null)
+SynCaseSensitive:	DEFB	#00
+SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
 SynKeywords1:	DEFS	512,0
 SynKeywords2:	DEFS	256,0
-SynFileBuf:	DEFS	1024,0
-SynIndexBuf:	DEFS	384,0
+SynActiveSlotEnd:
+SynSlotTotalBytes	EQU	SynActiveSlotEnd - SynActiveSlot
+
+; --- Backup profile slot (mirror layout). Holds the previously-active
+;     profile so that toggling between two profiles never re-reads disk.
+SynBackupSlot:
+SynLoadedProfBk:	DEFS	20,0
+SynLC1Bk:	DEFS	4,0
+SynLC2Bk:	DEFS	4,0
+SynBrBk:	DEFS	12,0
+SynSDBk:	DEFS	4,0
+SynCSBk:	DEFB	#00
+SynHBCBk:	DEFB	#00
+SynKw1Bk:	DEFS	512,0
+SynKw2Bk:	DEFS	256,0
+SynBackupSlotEnd:
+
+SynFileBuf:	DEFS	640,0		; max .syn file size (read-once scratch)
+SynIndexBuf:	DEFS	256,0		; max INDEX.LST size (read-once scratch)
 
 SynPathIndex:	DEFB	"SYNTAX\\INDEX.LST",0
 SynDirPrefix:	DEFB	"SYNTAX\\",0
@@ -1614,6 +1856,7 @@ SynKeyCase:	DEFB	"case_sensitive=",0
 SynKeyLC1:	DEFB	"line_comment=",0
 SynKeyLC2:	DEFB	"line_comment2=",0
 SynKeyBrackets:	DEFB	"brackets=",0
+SynKeyStringDelims:	DEFB	"string_delims=",0
 SynBracketsDefault:	DEFB	"()[]",0
 
  _mCollectInfo_addEnd

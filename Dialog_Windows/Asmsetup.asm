@@ -107,6 +107,16 @@ InitTabWE
 	OR	B
 	LD	(ColBrace),A
 	LD	(CSBrace),A
+	LD	A,(ColString)
+	AND	C
+	OR	B
+	LD	(ColString),A
+	LD	(CSString),A
+	LD	A,(ColNumber)
+	AND	C
+	OR	B
+	LD	(ColNumber),A
+	LD	(CSNumber),A
 	LD	A,(SynHghLght)
 	OR	A
 	RET	NZ
@@ -115,6 +125,8 @@ InitTabWE
 	LD	(CSMnemon),A
 	LD	(CSComment),A
 	LD	(CSBrace),A
+	LD	(CSString),A
+	LD	(CSNumber),A
 	RET
 ;[]===========================================================[]
 InitText
@@ -452,6 +464,10 @@ InitS
 	DEFW	ColComment
 	DEFB	"BRACKETS",0
 	DEFW	ColBrace
+	DEFB	"STRINGS",0
+	DEFW	ColString
+	DEFB	"NUMBERS",0
+	DEFW	ColNumber
 	; Legacy aliases — let .set files written before the rename still load.
 	DEFB	"MNEMONIC",0
 	DEFW	ColMnemon
@@ -781,6 +797,12 @@ SetupLst
 	DEFB	#0D,#0A
 	DEFB	"     sBrackets=",0,1
 	DEFW	ColBrace
+	DEFB	#0D,#0A
+	DEFB	"     sStrings=",0,1
+	DEFW	ColString
+	DEFB	#0D,#0A
+	DEFB	"     sNumbers=",0,1
+	DEFW	ColNumber
 	DEFB	#0D,#0A
 	DEFB	#0D,#0A
 	DEFB	"     mWindowsAttributs=",0,1
