@@ -526,7 +526,7 @@ SynHighlightKeywords:
 	RET	Z
 	LD	A,(TmpColM)
 	LD	(SynKwColor),A
-	LD	HL,SynKeywords1
+	LD	HL,SynKw1Idx
 	LD	(SynKwPtr),HL
 	CALL	SynHighlightKeywordsOne
 	LD	HL,SynKeywords2
@@ -535,7 +535,7 @@ SynHighlightKeywords:
 	RET	Z
 	LD	A,(TmpColL)
 	LD	(SynKwColor),A
-	LD	HL,SynKeywords2
+	LD	HL,SynKw2Idx
 	LD	(SynKwPtr),HL
 	CALL	SynHighlightKeywordsOne
 	RET
@@ -564,9 +564,9 @@ SynKWLp:
 	POP	HL
 	POP	BC
 	JR	C,SynKWNext
-	LD	DE,(SynKwPtr)
+	LD	DE,(SynKwPtr)			; idx buffer
 	PUSH	HL
-	CALL	SynWordInList
+	CALL	SynWordInListIdx
 	POP	HL
 	JR	NZ,SynKWSkipWord
 	LD	A,(SynKwColor)
@@ -588,6 +588,106 @@ SynKWNext:
 	INC	HL
 	DEC	B
 	JR	SynKWLp
+
+; Look up SynToken in a sorted+indexed keyword list.
+; In:  DE = idx buffer (54 bytes — 27 word entries built by SynBuildKwIndex)
+;      SynToken / SynTokenLen — token to match (already lowered if profile
+;      is case-insensitive)
+; Out: Z if SynToken matches some keyword; NZ otherwise. HL is clobbered.
+SynWordInListIdx:
+	LD	A,(SynToken)			; first letter
+	OR	A
+	JR	Z,SynWIxNo			; empty token
+	PUSH	DE
+	CALL	SynLetterBucket			; A = bucket
+	POP	DE
+	; HL = idx + 2*A
+	ADD	A,A
+	LD	L,A
+	LD	H,#00
+	ADD	HL,DE
+	; Read zone start pointer
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	LD	A,D
+	OR	E
+	JR	Z,SynWIxNo			; bucket empty
+	; DE = first word in bucket. Walk this zone (until first letter changes).
+	LD	A,(SynToken)
+	LD	C,A				; C = expected first letter (bucket key char)
+	; Convert C to bucket value to compare easily; faster: compare via
+	; SynLetterBucket on each word's first char.
+	PUSH	DE
+	LD	A,C
+	CALL	SynLetterBucket
+	LD	C,A				; C = expected bucket
+	POP	DE
+SynWIxLp:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynWIxNo
+	; Bucket of current word
+	PUSH	BC
+	PUSH	DE
+	CALL	SynLetterBucket
+	POP	DE
+	POP	BC
+	CP	C
+	JR	NZ,SynWIxNo			; left our zone
+	; Full compare SynToken vs current word (case already aligned)
+	PUSH	DE
+	LD	HL,SynToken
+	LD	A,(SynTokenLen)
+	LD	B,A				; B = remaining chars to compare
+SynWIxCmp:
+	LD	A,B
+	OR	A
+	JR	Z,SynWIxCmpEnd
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynWIxCmpFail
+	CP	','
+	JR	Z,SynWIxCmpFail
+	CP	' '
+	JR	Z,SynWIxCmpFail
+	CP	(HL)
+	JR	NZ,SynWIxCmpFail
+	INC	DE
+	INC	HL
+	DEC	B
+	JR	SynWIxCmp
+SynWIxCmpEnd:
+	; Token consumed; current word must end here (NUL/','/space) for match
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynWIxYes
+	CP	','
+	JR	Z,SynWIxYes
+	CP	' '
+	JR	Z,SynWIxYes
+SynWIxCmpFail:
+	POP	DE
+	; Skip rest of current word until ','
+SynWIxSkip:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynWIxNo
+	CP	','
+	JR	Z,SynWIxNext
+	INC	DE
+	JR	SynWIxSkip
+SynWIxNext:
+	INC	DE				; consume ','
+	JR	SynWIxLp
+SynWIxYes:
+	POP	DE				; restore the saved entry pointer
+	XOR	A
+	RET
+SynWIxNo:
+	LD	A,#01
+	OR	A
+	RET
 
 ; Paint string literals delimited by characters listed in SynStringDelims
 ; (e.g. " or '). Only the OPENING delimiter is required to be at base
@@ -667,15 +767,19 @@ SynHSSkipCh:
 	JR	NZ,SynHSScanCh
 	RET
 
-; Paint numeric literals — sequences that start with a digit and continue
-; with word chars (digits/letters/'_') — with TmpColN. Only paints chars
-; still at SynBaseColor so we don't overpaint earlier passes.
+; Paint numeric literals with TmpColN. A "number" is a token (identifier-
+; like sequence) whose FIRST char is a digit. Token boundaries are detected
+; by SynIsIdChar (letters, digits, '_', '@', '?', '$') so e.g. asm labels
+; like @14, ?cpshd, $1000 stay un-painted as identifiers, not numbers.
+; Only paints chars still at SynBaseColor.
 SynHighlightNumbers:
 	LD	A,(SynLineLen)
 	OR	A
 	RET	Z
-	LD	B,A
+	LD	B,A				; B = remaining chars
 	LD	HL,(SynWorkBuf)
+	LD	D,#00				; D = in_token flag
+	LD	E,#00				; E = current token is number flag
 SynHNScan:
 	INC	HL
 	LD	A,(HL)
@@ -683,38 +787,72 @@ SynHNScan:
 	LD	C,A
 	LD	A,(SynBaseColor)
 	CP	C
-	JR	NZ,SynHNNextCh
+	JR	NZ,SynHNPainted
+	LD	A,(HL)
+	PUSH	BC
+	PUSH	DE
+	CALL	SynIsIdChar			; CF=0 if id char, CF=1 if separator
+	POP	DE
+	POP	BC
+	JR	C,SynHNSeparator
+	; Identifier-class char at base color
+	LD	A,D
+	OR	A
+	JR	NZ,SynHNCont			; continuing existing token
+	; New token starts here. Check if first char is digit.
 	LD	A,(HL)
 	CP	'0'
-	JR	C,SynHNNextCh
+	JR	C,SynHNTokId			; not digit → identifier, not number
 	CP	'9'+1
-	JR	NC,SynHNNextCh
-	; digit at base color — start of numeric token
-SynHNTok:
+	JR	NC,SynHNTokId
+	; First char is digit → mark as number token, paint.
+	LD	D,#01
+	LD	E,#01
+	JR	SynHNPaintCh
+SynHNTokId:
+	; Identifier (non-numeric) start
+	LD	D,#01
+	LD	E,#00
+	JR	SynHNAdvance
+SynHNCont:
+	; Continuing existing token. Paint only if E=1 (number).
+	LD	A,E
+	OR	A
+	JR	Z,SynHNAdvance
+SynHNPaintCh:
 	INC	HL
 	LD	A,(TmpColN)
 	LD	(HL),A
 	DEC	HL
-	INC	HL
-	INC	HL
-	DEC	B
-	RET	Z
-	INC	HL
-	LD	A,(HL)
-	DEC	HL
-	LD	C,A
-	LD	A,(SynBaseColor)
-	CP	C
-	JR	NZ,SynHNScan			; next pos already painted — token ends
-	LD	A,(HL)
-	CALL	SynIsWordChar
-	JR	NC,SynHNTok			; word char (digit/letter/_) — keep painting
-	JR	SynHNScan			; non-word — token ends, continue scan
-SynHNNextCh:
+	JR	SynHNAdvance
+SynHNSeparator:
+	; Non-id char at base. End any token.
+	LD	D,#00
+	LD	E,#00
+	JR	SynHNAdvance
+SynHNPainted:
+	; Already painted (comment/string region). End token.
+	LD	D,#00
+	LD	E,#00
+SynHNAdvance:
 	INC	HL
 	INC	HL
 	DEC	B
 	JR	NZ,SynHNScan
+	RET
+
+; CF=0 if A is part of an identifier (letter/digit/'_'/'@'/'?'/'$').
+; CF=1 otherwise. Preserves all other registers.
+SynIsIdChar:
+	CP	'@'
+	JR	Z,SynIsIdYes
+	CP	'?'
+	JR	Z,SynIsIdYes
+	CP	'$'
+	JR	Z,SynIsIdYes
+	JP	SynIsWordChar			; tail-call: returns its CF directly
+SynIsIdYes:
+	OR	A				; CF=0
 	RET
 
 ; Paint bracket characters listed in SynBrackets with TmpColB — only on
@@ -1136,11 +1274,20 @@ SynEnsureProfileLoaded:
 	JR	NZ,SynEPL_Fresh
 	; Wanted profile sits in backup — swap with active, no disk I/O.
 	CALL	SynSwapSlots
+	; Active keyword buffers now hold sorted data from the previous swap;
+	; rebuild the index in place (no sort, single O(N) pass).
+	LD	HL,SynKeywords1
+	LD	DE,SynKw1Idx
+	CALL	SynRebuildKwIndex
+	LD	HL,SynKeywords2
+	LD	DE,SynKw2Idx
+	CALL	SynRebuildKwIndex
 	RET
 SynEPL_Fresh:
 	; Wanted profile is in neither slot. Move whatever active was into
 	; backup (becoming the LRU cache entry), then load the new one fresh
-	; into active.
+	; into active. SynLoadProfile will do the full sort+index for the
+	; new profile, so we don't rebuild the index here.
 	CALL	SynSwapSlots
 	LD	HL,SynProfileName
 	LD	DE,SynLoadedProf
@@ -1210,11 +1357,22 @@ SynLoadProfile:
 	; SynToLower overhead. SynToken is already lowered in SynCollectWord.
 	LD	A,(SynCaseSensitive)
 	OR	A
-	RET	NZ
+	JR	NZ,SynLP_NoLower
 	LD	HL,SynKeywords1
 	CALL	SynLowerCsv
 	LD	HL,SynKeywords2
 	CALL	SynLowerCsv
+SynLP_NoLower:
+	; Sort each keyword buffer in place by first letter and build the
+	; first-letter index. Done once at load; SynEnsureProfileLoaded re-uses
+	; the cached index, and after a slot swap SynRebuildKwIndex rebuilds
+	; cheaply since the data is still sorted.
+	LD	HL,SynKeywords1
+	LD	DE,SynKw1Idx
+	CALL	SynBuildKwIndex
+	LD	HL,SynKeywords2
+	LD	DE,SynKw2Idx
+	CALL	SynBuildKwIndex
 	RET
 
 ; Lowercase every byte of an ASCIIZ string in place. ',' and other
@@ -1227,6 +1385,283 @@ SynLowerCsv:
 	LD	(HL),A
 	INC	HL
 	JR	SynLowerCsv
+
+; In:  A = char (any case)
+; Out: A = bucket index 0..25 for 'a'..'z', 26 for any non-letter.
+SynLetterBucket:
+	CALL	SynToLower
+	CP	'a'
+	JR	C,SynLB_Other
+	CP	'z'+1
+	JR	NC,SynLB_Other
+	SUB	'a'
+	RET
+SynLB_Other:
+	LD	A,26
+	RET
+
+; Counting-sort the keyword CSV in place (by first letter) and build the
+; first-letter index. Done once per profile load. SynFileBuf is used as
+; scratch: bytes 0..26 hold per-bucket byte counts during phase 1, and
+; bytes 27.. hold the sorted output buffer during phase 3.
+;
+; In:  HL = keyword buffer (ASCIIZ CSV)
+;      DE = idx buffer (54 bytes — 27 word entries)
+SynBuildKwIndex:
+	LD	(SynBKISrc),HL
+	LD	(SynBKIIdx),DE
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	; --- Phase 0: clear scratch counters (27 bytes at SynFileBuf) ---
+	LD	HL,SynFileBuf
+	LD	D,H
+	LD	E,L
+	INC	DE
+	LD	BC,26
+	LD	(HL),0
+	LDIR
+	; --- Phase 1: count bytes per bucket ---
+	LD	HL,(SynBKISrc)
+SynBKI1Lp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI1End
+	LD	(SynBKICur),HL
+	CALL	SynLetterBucket
+	LD	(SynBKIBkt),A
+	LD	HL,(SynBKICur)
+	LD	B,#00				; word length
+SynBKI1WordLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI1WordEnd
+	CP	','
+	JR	Z,SynBKI1WordEnd
+	INC	HL
+	INC	B
+	JR	SynBKI1WordLp
+SynBKI1WordEnd:
+	; B = word_len. Add (B+1) to SynFileBuf[bucket].
+	PUSH	HL
+	LD	A,(SynBKIBkt)
+	LD	HL,SynFileBuf
+	LD	E,A
+	LD	D,#00
+	ADD	HL,DE
+	LD	A,(HL)
+	ADD	A,B
+	INC	A
+	LD	(HL),A
+	POP	HL
+	; Skip ',' if present
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI1End
+	INC	HL
+	JR	SynBKI1Lp
+SynBKI1End:
+	; --- Phase 2: prefix-sum byte counters into idx as 27 word entries ---
+	LD	HL,(SynBKIIdx)
+	LD	DE,SynFileBuf
+	LD	BC,#0000			; cumulative
+	LD	A,#1B				; 27 entries
+SynBKI2Lp:
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
+	INC	HL
+	EX	AF,AF'
+	LD	A,(DE)
+	INC	DE
+	ADD	A,C
+	LD	C,A
+	JR	NC,SynBKI2NoCarry
+	INC	B
+SynBKI2NoCarry:
+	EX	AF,AF'
+	DEC	A
+	JR	NZ,SynBKI2Lp
+	; --- Phase 3: scatter words from src into scratch[27..] ---
+	LD	HL,(SynBKISrc)
+SynBKI3Lp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI3End
+	LD	(SynBKICur),HL
+	CALL	SynLetterBucket
+	LD	(SynBKIBkt),A
+	; idx entry addr = idx + 2*bucket
+	LD	HL,(SynBKIIdx)
+	ADD	A,A
+	LD	E,A
+	LD	D,#00
+	ADD	HL,DE
+	; HL = idx entry addr; read current write offset (relative to scratch+27)
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	DEC	HL
+	PUSH	HL				; save idx entry addr
+	; Compute scratch dst = SynFileBuf+27 + offset
+	LD	HL,SynFileBuf+27
+	ADD	HL,DE
+	LD	DE,(SynBKICur)			; DE = src word ptr
+	LD	BC,#0000			; bytes copied
+SynBKI3CpLp:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynBKI3CpEnd
+	CP	','
+	JR	Z,SynBKI3CpEnd
+	LD	(HL),A
+	INC	HL
+	INC	DE
+	INC	BC
+	JR	SynBKI3CpLp
+SynBKI3CpEnd:
+	; Append separator ','
+	LD	A,','
+	LD	(HL),A
+	INC	BC				; BC = word_len + 1
+	; Update idx entry: add BC
+	POP	HL
+	LD	A,(HL)
+	ADD	A,C
+	LD	(HL),A
+	INC	HL
+	LD	A,(HL)
+	ADC	A,B
+	LD	(HL),A
+	; Continue with next word (DE points past current word in src)
+	EX	DE,HL				; HL = src ptr (just past word body)
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI3End
+	INC	HL				; consume ','
+	JR	SynBKI3Lp
+SynBKI3End:
+	; --- Phase 4: copy scratch[27..27+total] back to src; total = idx[26] ---
+	LD	HL,(SynBKIIdx)
+	LD	BC,52				; 26 buckets * 2 bytes (start of bucket 26)
+	ADD	HL,BC
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	; DE = total bytes after phase 3
+	LD	A,D
+	OR	E
+	JR	Z,SynBKI4Done
+	PUSH	DE
+	LD	HL,SynFileBuf+27
+	LD	DE,(SynBKISrc)
+	POP	BC
+	PUSH	BC
+	LDIR
+	POP	BC
+	; Replace last ',' with NUL
+	LD	HL,(SynBKISrc)
+	DEC	BC
+	ADD	HL,BC
+	LD	(HL),0
+SynBKI4Done:
+	; --- Phase 5: rebuild idx as absolute pointers (zone starts) ---
+	; SynFileBuf[i] still holds the original byte count for bucket i.
+	LD	HL,(SynBKIIdx)
+	LD	DE,SynFileBuf
+	LD	BC,(SynBKISrc)			; BC = running zone-start ptr
+	LD	A,#1B
+SynBKI5Lp:
+	EX	AF,AF'
+	LD	A,(DE)				; bucket size
+	INC	DE
+	OR	A
+	JR	Z,SynBKI5Empty
+	; Non-empty: idx[i] = BC (current running ptr); then BC += A
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
+	INC	HL
+	; BC += A (8-bit add to BC)
+	ADD	A,C
+	LD	C,A
+	JR	NC,SynBKI5NoC
+	INC	B
+SynBKI5NoC:
+	JR	SynBKI5Next
+SynBKI5Empty:
+	; Empty bucket: idx[i] = 0
+	LD	(HL),0
+	INC	HL
+	LD	(HL),0
+	INC	HL
+SynBKI5Next:
+	EX	AF,AF'
+	DEC	A
+	JR	NZ,SynBKI5Lp
+	RET
+
+; Rebuild the first-letter index from already-sorted keyword data. Used
+; after a slot swap (sort property is preserved by content swap, only
+; pointers need to be rebuilt). Single O(N) pass.
+;
+; In:  HL = sorted keyword buffer (ASCIIZ CSV)
+;      DE = idx buffer (54 bytes)
+SynRebuildKwIndex:
+	LD	(SynBKISrc),HL
+	LD	(SynBKIIdx),DE
+	; Clear idx (54 bytes)
+	PUSH	DE
+	POP	HL
+	LD	D,H
+	LD	E,L
+	INC	DE
+	LD	BC,53
+	LD	(HL),0
+	LDIR
+	LD	HL,(SynBKISrc)
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	A,#FF
+	LD	(SynBKIPrev),A			; prev bucket (none)
+SynRBI_Lp:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	LD	(SynBKICur),HL
+	CALL	SynLetterBucket
+	LD	C,A
+	LD	A,(SynBKIPrev)
+	CP	C
+	JR	Z,SynRBI_Skip			; same bucket as previous word — already indexed
+	LD	A,C
+	LD	(SynBKIPrev),A
+	; idx[bucket] = SynBKICur
+	LD	HL,(SynBKIIdx)
+	LD	A,C
+	ADD	A,A
+	LD	E,A
+	LD	D,#00
+	ADD	HL,DE
+	LD	DE,(SynBKICur)
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+SynRBI_Skip:
+	; Advance HL to next word
+	LD	HL,(SynBKICur)
+SynRBI_SkipBody:
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	CP	','
+	JR	Z,SynRBI_Next
+	INC	HL
+	JR	SynRBI_SkipBody
+SynRBI_Next:
+	INC	HL				; consume ','
+	JR	SynRBI_Lp
 
 ; Compare null-terminated strings at HL and DE. Z if equal, NZ if not.
 ; Preserves HL, DE.
@@ -1806,6 +2241,11 @@ SynLFDst:	DEFW	#0000		; destination buffer for SynLoadFileToBuf
 SynLFMax:	DEFW	#0000		; max bytes to read for SynLoadFileToBuf
 SynRelPath:	DEFW	#0000		; relative path saved across page swaps in SynLoadFileToBuf
 SynSwapTmp:	DEFB	#00		; one-byte scratch used by SynSwapSlots
+SynBKISrc:	DEFW	#0000		; scratch for SynBuildKwIndex / SynRebuildKwIndex
+SynBKIIdx:	DEFW	#0000
+SynBKICur:	DEFW	#0000
+SynBKIBkt:	DEFB	#00
+SynBKIPrev:	DEFB	#00
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
 SynWorkBuf:	DEFW	#0000
@@ -1825,13 +2265,23 @@ SynBrackets:	DEFS	12,0		; bracket chars to highlight (up to 11 + null)
 SynStringDelims:	DEFS	4,0		; string-literal delimiter chars (up to 3 + null)
 SynCaseSensitive:	DEFB	#00
 SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
-SynKeywords1:	DEFS	512,0
-SynKeywords2:	DEFS	256,0
+SynKeywords1:	DEFS	384,0		; primary keywords CSV (sorted by first letter)
+SynKeywords2:	DEFS	128,0		; secondary keywords CSV (sorted by first letter)
 SynActiveSlotEnd:
 SynSlotTotalBytes	EQU	SynActiveSlotEnd - SynActiveSlot
 
-; --- Backup profile slot (mirror layout). Holds the previously-active
-;     profile so that toggling between two profiles never re-reads disk.
+; --- First-letter index for the active slot. NOT part of the swap region;
+;     after a swap, the new active data is already sorted (sort sticks to
+;     content), so we just rebuild these pointers in a single O(N) pass.
+;     Each index is 27 word entries: 26 letter buckets ('a'..'z') plus one
+;     for non-letter starts. Each entry holds the absolute pointer to the
+;     first keyword in that bucket, or 0 if the bucket is empty.
+SynKw1Idx:	DEFS	54,0
+SynKw2Idx:	DEFS	54,0
+
+; --- Backup profile slot (mirror layout of swap region). Holds the
+;     previously-active profile so that toggling between two profiles never
+;     re-reads disk.
 SynBackupSlot:
 SynLoadedProfBk:	DEFS	20,0
 SynLC1Bk:	DEFS	4,0
@@ -1840,8 +2290,8 @@ SynBrBk:	DEFS	12,0
 SynSDBk:	DEFS	4,0
 SynCSBk:	DEFB	#00
 SynHBCBk:	DEFB	#00
-SynKw1Bk:	DEFS	512,0
-SynKw2Bk:	DEFS	256,0
+SynKw1Bk:	DEFS	384,0
+SynKw2Bk:	DEFS	128,0
 SynBackupSlotEnd:
 
 SynFileBuf:	DEFS	640,0		; max .syn file size (read-once scratch)
