@@ -347,10 +347,11 @@ Ink1	CALL	GivNumb
 	CP	#2C
 	RET	NZ
 Ink2	LD	A,LX
-	CP	#10
-	RET	NC
+	; Store full 8-bit attribute byte; the writer (GetColors) now emits
+	; the whole byte rather than just the low nibble, so the round-trip
+	; preserves user-selected high-nibble bits (e.g. brightness).
 	LD	(BC),A
-	RET 
+	RET
 
 GivNumb	LD	LX,#00
 GivNum1	LD	A,(DE)
@@ -583,8 +584,10 @@ GetColors
 	JR	Z,TwoCol
 	CP	#F0
 	JR	Z,Paper
+	; Ink-only slot: emit full attribute byte so the high nibble (bright/
+	; extended bits) survives the save/load round-trip. The reader (Ink2)
+	; stores the whole byte as-is.
 	LD	A,C
-	AND	#0F
 	CALL	GetNUM8
 	LD	A,","
 	LD	(DE),A
@@ -877,6 +880,35 @@ LaunchPathBuf:
 ; settings-save operation, so we can restore PathCur afterwards.
 TempDirBuf:
 	BLOCK	256,0
+;[]===========================================================[]
+; Cold SyntaxExt buffers paged out of KodeMain into Dialog_Windows_PG2 to
+; free space in the always-resident main page. Callers in SyntaxExt.asm
+; must page DialogPg2 into SLOT3 before reading/writing these buffers
+; (the helpers SynPageDp2In / SynPageDp2Out wrap that paging dance).
+;
+;   SynBackupSlot — LRU cache for the previously-active syntax profile.
+;     Layout MUST mirror SynActiveSlot in SyntaxExt.asm; the two are
+;     byte-swapped wholesale by SynSwapSlots.
+SynBackupSlot:
+SynLoadedProfBk:	BLOCK	20,0
+SynLC1Bk:	BLOCK	4,0
+SynLC2Bk:	BLOCK	4,0
+SynBrBk:	BLOCK	12,0
+SynSDBk:	BLOCK	4,0
+SynCSBk:	BLOCK	1,0
+SynHBCBk:	BLOCK	1,0
+SynKw1Bk:	BLOCK	384,0
+SynKw2Bk:	BLOCK	128,0
+SynBackupSlotEnd:
+
+;   SynFileBuf — read-once scratch for .syn profile content; reused as
+;     output buffer during SynBuildKwIndex counting sort.
+SynFileBuf:	BLOCK	640,0
+
+;   SynIndexBuf — read-once scratch for SYNTAX\INDEX.LST content; lookups
+;     run directly against this buffer.
+SynIndexBuf:	BLOCK	256,0
+
 ;[]===========================================================[]
 SetupBuff:
 	DEFW	#FFFF

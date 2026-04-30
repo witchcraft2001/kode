@@ -150,7 +150,13 @@ SynDDone:
 	CP	#01
 	JR	NZ,SynDTryDirect
 	PUSH	DE
+	; SynDetectLangViaIndex scans SynIndexBuf which lives in
+	; Dialog_Windows_PG2; page it in for the duration of the scan.
+	; SynPageDp2Out preserves AF, so the post-call OR A still sees the
+	; success flag returned by SynDetectLangViaIndex.
+	CALL	SynPageDp2In
 	CALL	SynDetectLangViaIndex
+	CALL	SynPageDp2Out
 	POP	DE
 	OR	A
 	RET	NZ
@@ -1297,8 +1303,10 @@ SynEPL_Fresh:
 
 ; Byte-swap the active and backup slots in place. Used to move a cached
 ; profile into the active position (or push the active one out to backup
-; before loading a new one).
+; before loading a new one). Backup slot lives in Dialog_Windows_PG2, so
+; we page that into SLOT3 for the duration of the swap.
 SynSwapSlots:
+	CALL	SynPageDp2In
 	LD	HL,SynLoadedProf
 	LD	DE,SynLoadedProfBk
 	LD	BC,SynSlotTotalBytes
@@ -1315,7 +1323,7 @@ SynSwapLp:
 	LD	A,B
 	OR	C
 	JR	NZ,SynSwapLp
-	RET
+	JP	SynPageDp2Out
 
 ; Load the profile identified by SynProfileName. Clears all per-profile
 ; state first so switching between profiles is clean.
@@ -1350,11 +1358,12 @@ SynLoadProfile:
 	LD	HL,SynProfilePath
 	CALL	SynLoadFileToBuf
 	RET	C
+	; SynParseProfileBuf reads SynFileBuf (paged out into Dialog_Windows_PG2),
+	; and SynBuildKwIndex uses SynFileBuf as scratch. Page DialogPg2 into
+	; SLOT3 around all SynFileBuf accesses.
+	CALL	SynPageDp2In
 	CALL	SynParseProfileBuf
 	CALL	SynDetectBlockCom
-	; If case-insensitive, pre-lower the keyword buffers once so that the
-	; runtime compare in SynWordInList is a plain CP (HL) without per-char
-	; SynToLower overhead. SynToken is already lowered in SynCollectWord.
 	LD	A,(SynCaseSensitive)
 	OR	A
 	JR	NZ,SynLP_NoLower
@@ -1363,17 +1372,13 @@ SynLoadProfile:
 	LD	HL,SynKeywords2
 	CALL	SynLowerCsv
 SynLP_NoLower:
-	; Sort each keyword buffer in place by first letter and build the
-	; first-letter index. Done once at load; SynEnsureProfileLoaded re-uses
-	; the cached index, and after a slot swap SynRebuildKwIndex rebuilds
-	; cheaply since the data is still sorted.
 	LD	HL,SynKeywords1
 	LD	DE,SynKw1Idx
 	CALL	SynBuildKwIndex
 	LD	HL,SynKeywords2
 	LD	DE,SynKw2Idx
 	CALL	SynBuildKwIndex
-	RET
+	JP	SynPageDp2Out
 
 ; Lowercase every byte of an ASCIIZ string in place. ',' and other
 ; separators stay as-is because SynToLower is a no-op on non-letters.
@@ -1385,6 +1390,26 @@ SynLowerCsv:
 	LD	(HL),A
 	INC	HL
 	JR	SynLowerCsv
+
+; Page Dialog_Windows_PG2 into SLOT3 so SynBackupSlot / SynFileBuf /
+; SynIndexBuf become accessible. SynDp2SavedSlot3 holds the previous
+; mapping for restoration. Callers must pair Dp2In with Dp2Out — and
+; must NOT nest pairs (the saved-slot variable is single-shot).
+; Preserves AF.
+SynPageDp2In:
+	PUSH	AF
+	IN	A,(SLOT3)
+	LD	(SynDp2SavedSlot3),A
+	LD	A,(DialogPg2)
+	OUT	(SLOT3),A
+	POP	AF
+	RET
+SynPageDp2Out:
+	PUSH	AF
+	LD	A,(SynDp2SavedSlot3)
+	OUT	(SLOT3),A
+	POP	AF
+	RET
 
 ; In:  A = char (any case)
 ; Out: A = bucket index 0..25 for 'a'..'z', 26 for any non-letter.
@@ -2241,6 +2266,7 @@ SynLFDst:	DEFW	#0000		; destination buffer for SynLoadFileToBuf
 SynLFMax:	DEFW	#0000		; max bytes to read for SynLoadFileToBuf
 SynRelPath:	DEFW	#0000		; relative path saved across page swaps in SynLoadFileToBuf
 SynSwapTmp:	DEFB	#00		; one-byte scratch used by SynSwapSlots
+SynDp2SavedSlot3:	DEFB	#00	; saved SLOT3 mapping for SynPageDp2In/Out
 SynBKISrc:	DEFW	#0000		; scratch for SynBuildKwIndex / SynRebuildKwIndex
 SynBKIIdx:	DEFW	#0000
 SynBKICur:	DEFW	#0000
@@ -2279,23 +2305,10 @@ SynSlotTotalBytes	EQU	SynActiveSlotEnd - SynActiveSlot
 SynKw1Idx:	DEFS	54,0
 SynKw2Idx:	DEFS	54,0
 
-; --- Backup profile slot (mirror layout of swap region). Holds the
-;     previously-active profile so that toggling between two profiles never
-;     re-reads disk.
-SynBackupSlot:
-SynLoadedProfBk:	DEFS	20,0
-SynLC1Bk:	DEFS	4,0
-SynLC2Bk:	DEFS	4,0
-SynBrBk:	DEFS	12,0
-SynSDBk:	DEFS	4,0
-SynCSBk:	DEFB	#00
-SynHBCBk:	DEFB	#00
-SynKw1Bk:	DEFS	384,0
-SynKw2Bk:	DEFS	128,0
-SynBackupSlotEnd:
-
-SynFileBuf:	DEFS	640,0		; max .syn file size (read-once scratch)
-SynIndexBuf:	DEFS	256,0		; max INDEX.LST size (read-once scratch)
+; SynBackupSlot, SynFileBuf and SynIndexBuf live in Dialog_Windows_PG2 (see
+; Dialog_Windows/Asmsetup.asm). They are accessed via SynPageDp2In /
+; SynPageDp2Out, which page DialogPg2 into SLOT3 around the access. This
+; keeps ~1.5 KB out of the always-resident KodeMain page.
 
 SynPathIndex:	DEFB	"SYNTAX\\INDEX.LST",0
 SynDirPrefix:	DEFB	"SYNTAX\\",0
