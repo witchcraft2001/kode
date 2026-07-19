@@ -27,4 +27,4 @@ Z84.PIO.Port_B.Command  EQU #1F
 
 ToBIOS          EQU #08
 ToDSS           EQU #10
-ToBIOS_18       EQU #30
+ToBIOS_18       EQU #18
