@@ -71,6 +71,11 @@ exeLoader.Start:
 	LD	(#0038),HL				; New rst #38
 	LD	A,(IX-#03)				; File handle
 	LD	(Fhandle),A				; Save
+	PUSH	IX					; Command-line arg buffer (load-#80)
+	POP	HL
+	LD	DE,CmdTailTmp
+	LD	BC,#0080
+	LDIR						; Snapshot tail before pages change
 	CALL	ClearK
 	LD	BC,+(ModulesPages.Size)*256+BIOS.GetMem
 	RST	ToBIOS					; Must ModulesPages.Size pages memory
@@ -208,6 +213,25 @@ exeLoader.Start:
 	CALL	CaptureDir
 LaunchPathGot:
 
+; DialogPg2 is still mapped in SLOT3 here, so CmdTailBuf (resident in that
+; page) is reachable. Move the command-line tail out of the loader-local
+; staging buffer before it goes away.
+	LD	HL,CmdTailTmp
+	LD	DE,CmdTailBuf			; Dialog_Windows_PG2
+	LD	BC,#0080
+	LDIR
+
+; KODE.SET is written next to KODE.EXE by SaveSetUp (Dialog_Windows/Asmsetup.asm),
+; which ChDirs into the launch dir first; read it back the same way instead of
+; from the current dir. With a file named on the command line the current dir is
+; typically that file's directory, not ours, and the settings would be missed.
+; TempDirBuf is restored at NoSetup, before a relative command-line name gets
+; resolved against it in CmdLineOpen.
+	LD	HL,TempDirBuf
+	CALL	CaptureDir			; Save the shell's current dir
+	LD	HL,LaunchPathBuf
+	CALL	RestoreDir			; ChDir to the launch dir
+
 	LD	HL,SetupName
 	SUB	A
 	LD	C,Dss.Open
@@ -252,7 +276,9 @@ LaunchPathGot:
 	LD	C,Dss.Close
 	RST	ToDSS
 
-NoSetup:	IN	A,(SLOT0)
+NoSetup:	LD	HL,TempDirBuf		; Back to the dir Kode was launched from
+	CALL	RestoreDir
+	IN	A,(SLOT0)
 	PUSH	AF
 
 /*
@@ -334,6 +360,13 @@ DePACK:
 
 ;
 Fhandle:		BYTE	#00
+;
+
+; Command-line tail snapshotted from (IX) at entry (loader-local staging
+; area; SLOT1 holding it is repaged away by MoveP). Copied on into the
+; resident CmdTailBuf (Dialog_Windows_PG2) at LaunchPathGot below, before
+; this loader area goes away.
+CmdTailTmp:	BLOCK	#80,0			; PSP tail: len byte + args text
 ;
 
 ;

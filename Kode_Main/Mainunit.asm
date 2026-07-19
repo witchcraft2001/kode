@@ -147,6 +147,7 @@ KodeStart: DI
 	CALL	InitBar		; Initialize menu bar
 	CALL	InitDeskTop	; Initialize desk top
 	CALL	InitStLine	; Initialize status line
+	CALL	CmdStartup	; Open command-line file (if any)
 
 MainCyc	CALL	handleEvent	;Get event
 	SUB	A		;Beginner object
@@ -234,7 +235,21 @@ SetOlp	LD	C,(IX+#00)	; Object of list
 	POP	BC
 	POP	DE
 	POP	IX
-	RET 
+	RET
+;[]===========================================================[]
+; Open file given on command line: CmdLineOpen (Dialog_Windows_PG2) parses
+; the PSP tail. A=0 no argument; A=1 opened (load via stock path); A=2
+; absent (new window named after it, created on first Save).
+CmdStartup
+	CALL	SynPageDp2In	; DialogPg2 to SLOT3
+	CALL	CmdLineOpen
+	CALL	SynPageDp2Out	; Preserves AF
+	OR	A
+	RET	Z			; No argument - as before
+	DEC	A
+	JP	Z,OpFileN		; Opened: load via stock path
+	CALL	NewText			; Absent: new window...
+	JP	SetNewName		; ...renamed to FileName
 ;[]===========================================================[]
 exit:	CALL	CloseAll
 	DI 
