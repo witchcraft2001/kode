@@ -527,40 +527,30 @@ DWnList	DEFW	#0515
 
 	DEFB	#FF
 ;[]===========================================================[]
-DaboutV:; Defw #0819
-	BYTE	25			; Window by X by
-	BYTE	07			; Window by Y by
+DaboutV:
+	BYTE	22			; Window by X by
+	BYTE	09			; Window by Y by
 
-; Defw #0f1e
-	BYTE	30,16			; Window, window
+	BYTE	36,12			; Window xlen, ylen
 	DEFB	"About version",0
 
 	DEFB	TextLine
-	BYTE	10,2			; Window: number, number
+	BYTE	12,2			; Window: number, number
 	DEFB	'KODE v ',_progVERSION,0
 	DEFB	TextLine
-	BYTE	13,3
-	DEFB	"by:",0
+	BYTE	6,3
+	DEFB	"by Dmitry Mikhalchenkov",0
 	DEFB	TextLine
-	BYTE	10,4
-	DEFB	"Enin Anton",0
+	BYTE	11,4
+	DEFB	"2:5030/1997.10",0
 	DEFB	TextLine
-	BYTE	7,6
-	DEFB	"Latest issue by:",0	; Latest issue by: anatoliy belyanskiy
+	BYTE	3,6
+	DEFB	"Based on TASM's source code by",0
 	DEFB	TextLine
-	BYTE	5,7
-	DEFB	"Anatoliy Belyanskiy,",0
-	DEFB	TextLine
-	BYTE	10,8
-	DEFB	_luaBUILD_DATEfull,0
-	DEFB	TextLine
-	BYTE	5,10
-	DEFB	"All rights reserved,",0
-	DEFB	TextLine
-	BYTE	8,11
-	DEFB	"Sprinter Team.",0
+	BYTE	13,7
+	DEFB	"Anton Enin",0
 	DEFB	Button
-	BYTE	11,13
+	BYTE	13,9
 	DEFB	"   ~O~k   ",0,cmOkey,CTokD
 	DEFB	#FF
 ;[]===========================================================[]
