@@ -338,12 +338,7 @@ EndTXTn:	LD	A,(IY+#06)
 PrintPage:
 	LD	A,#01
 	LD	(SynRenderPass),A
-	CALL	SynDetectLang
-	LD	(SynLang),A
-	LD	(SynRenderLang),A
-	LD	A,#01
-	LD	(SynRenderLangValid),A
-	CALL	SynSeedBlockFromTop
+	CALL	SynPrepareRender
 	LD	IX,TxtWtab
 	LD	A,(IX+#21)	; Window page
 	LD	(Page1+1),A
@@ -475,12 +470,7 @@ regA2:	LD	(IY-#04),#00
 RefreshPage:
 	LD	A,#01
 	LD	(SynRenderPass),A
-	CALL	SynDetectLang
-	LD	(SynLang),A
-	LD	(SynRenderLang),A
-	LD	A,#01
-	LD	(SynRenderLangValid),A
-	CALL	SynSeedBlockFromTop
+	CALL	SynPrepareRender
 	LD	IX,TxtWtab
 	LD	A,(IX+#21)	; Window page
 	LD	(Page2+1),A
@@ -1109,6 +1099,7 @@ GetHex1:	AND	#0F
 	RET 
 ;[]===========================================================[]
 PutString:
+	CALL	SynInvalidateBlockCache
 	LD	HL,#0000
 	LD	(MarkCeil),HL
 	CALL	CompileStr

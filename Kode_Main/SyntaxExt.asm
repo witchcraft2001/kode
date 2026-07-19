@@ -39,6 +39,7 @@ SyntaxExtTryBuf:
 	LD	(SynLang),A
 	OR	A
 	RET	Z
+	CALL	SynEnsureProfileLoaded
 	CALL	SynSeedBlockAtCursor
 	JR	SynExtRun
 
@@ -51,6 +52,7 @@ SynExtRender:
 	LD	(SynLang),A
 	OR	A
 	RET	Z
+	CALL	SynCacheBlockIX
 	JR	SynExtRun
 
 SynExtRDet:
@@ -62,14 +64,32 @@ SynExtRDet:
 	LD	A,(SynLang)
 	OR	A
 	RET	Z
+	CALL	SynEnsureProfileLoaded
+	LD	A,#01
+	LD	(SynRenderLangValid),A
+	CALL	SynCacheBlockIX
 	JR	SynExtRun
 SynExtRun:
 	CALL	SynHighlightComments
-	CALL	SynEnsureProfileLoaded
 	CALL	SynHighlightStrings
-	CALL	SynHighlightKeywords
 	CALL	SynHighlightNumbers
+	CALL	SynHighlightKeywords
 	CALL	SynHighlightBrackets
+	RET
+
+; Detect and load the syntax profile once before a multi-line render pass,
+; then seed block-comment state with the new profile already active.
+SynPrepareRender:
+	CALL	SynDetectLang
+	LD	(SynLang),A
+	LD	(SynRenderLang),A
+	OR	A
+	JR	Z,SynPRReady
+	CALL	SynEnsureProfileLoaded
+	CALL	SynSeedBlockFromTop
+SynPRReady:
+	LD	A,#01
+	LD	(SynRenderLangValid),A
 	RET
 
 SynSetupLineColors:
@@ -529,24 +549,12 @@ SynHighlightKeywords:
 	LD	HL,SynKeywords1
 	LD	A,(HL)
 	OR	A
-	RET	Z
-	LD	A,(TmpColM)
-	LD	(SynKwColor),A
-	LD	HL,SynKw1Idx
-	LD	(SynKwPtr),HL
-	CALL	SynHighlightKeywordsOne
+	JR	NZ,SynHKRun
 	LD	HL,SynKeywords2
 	LD	A,(HL)
 	OR	A
 	RET	Z
-	LD	A,(TmpColL)
-	LD	(SynKwColor),A
-	LD	HL,SynKw2Idx
-	LD	(SynKwPtr),HL
-	CALL	SynHighlightKeywordsOne
-	RET
-
-SynHighlightKeywordsOne:
+SynHKRun:
 	LD	A,(SynLineLen)
 	LD	B,A
 	LD	HL,(SynWorkBuf)
@@ -562,20 +570,38 @@ SynKWLp:
 	CP	C
 	JR	NZ,SynKWNext
 	LD	A,(HL)
+	CP	'#'
+	JR	Z,SynKWCollect
 	CALL	SynIsWordStart
 	JR	C,SynKWNext
+SynKWCollect:
 	PUSH	BC
 	PUSH	HL
 	CALL	SynCollectWord
 	POP	HL
 	POP	BC
 	JR	C,SynKWNext
-	LD	DE,(SynKwPtr)			; idx buffer
+	LD	A,(SynKeywords1)
+	OR	A
+	JR	Z,SynKWSecond
+	LD	DE,SynKw1Idx
+	PUSH	HL
+	CALL	SynWordInListIdx
+	POP	HL
+	JR	NZ,SynKWSecond
+	LD	A,(TmpColM)
+	JR	SynKWPaint
+SynKWSecond:
+	LD	A,(SynKeywords2)
+	OR	A
+	JR	Z,SynKWSkipWord
+	LD	DE,SynKw2Idx
 	PUSH	HL
 	CALL	SynWordInListIdx
 	POP	HL
 	JR	NZ,SynKWSkipWord
-	LD	A,(SynKwColor)
+	LD	A,(TmpColL)
+SynKWPaint:
 	PUSH	HL
 	CALL	SynColorWord
 	POP	HL
@@ -596,7 +622,8 @@ SynKWNext:
 	JR	SynKWLp
 
 ; Look up SynToken in a sorted+indexed keyword list.
-; In:  DE = idx buffer (54 bytes — 27 word entries built by SynBuildKwIndex)
+; In:  DE = idx buffer (56 bytes — 28 boundary pointers built by
+;      SynBuildKwIndex / SynRebuildKwIndex)
 ;      SynToken / SynTokenLen — token to match (already lowered if profile
 ;      is case-insensitive)
 ; Out: Z if SynToken matches some keyword; NZ otherwise. HL is clobbered.
@@ -612,35 +639,23 @@ SynWordInListIdx:
 	LD	L,A
 	LD	H,#00
 	ADD	HL,DE
-	; Read zone start pointer
+	; Read bucket start and the following boundary (exclusive end).
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
-	LD	A,D
-	OR	E
-	JR	Z,SynWIxNo			; bucket empty
-	; DE = first word in bucket. Walk this zone (until first letter changes).
-	LD	A,(SynToken)
-	LD	C,A				; C = expected first letter (bucket key char)
-	; Convert C to bucket value to compare easily; faster: compare via
-	; SynLetterBucket on each word's first char.
-	PUSH	DE
-	LD	A,C
-	CALL	SynLetterBucket
-	LD	C,A				; C = expected bucket
-	POP	DE
+	INC	HL
+	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)
+	LD	(SynKwEnd),BC
 SynWIxLp:
+	LD	HL,(SynKwEnd)
+	OR	A
+	SBC	HL,DE
+	JR	Z,SynWIxNo			; empty bucket / end of range
 	LD	A,(DE)
 	OR	A
 	JR	Z,SynWIxNo
-	; Bucket of current word
-	PUSH	BC
-	PUSH	DE
-	CALL	SynLetterBucket
-	POP	DE
-	POP	BC
-	CP	C
-	JR	NZ,SynWIxNo			; left our zone
 	; Full compare SynToken vs current word (case already aligned)
 	PUSH	DE
 	LD	HL,SynToken
@@ -745,6 +760,8 @@ SynHSStart:
 	RET	Z
 SynHSInside:
 	LD	A,(HL)
+	CP	#5C
+	JR	Z,SynHSEscape
 	CP	C
 	JR	Z,SynHSClose
 	INC	HL
@@ -756,6 +773,21 @@ SynHSInside:
 	DEC	B
 	JR	NZ,SynHSInside
 	RET					; ran off line without close — leave as is
+SynHSEscape:
+	; A backslash protects the following character, including the delimiter.
+	INC	HL
+	LD	A,(TmpColS)
+	LD	(HL),A
+	INC	HL
+	DEC	B
+	RET	Z
+	INC	HL
+	LD	A,(TmpColS)
+	LD	(HL),A
+	INC	HL
+	DEC	B
+	JR	NZ,SynHSInside
+	RET
 SynHSClose:
 	INC	HL
 	LD	A,(TmpColS)
@@ -773,78 +805,204 @@ SynHSSkipCh:
 	JR	NZ,SynHSScanCh
 	RET
 
-; Paint numeric literals with TmpColN. A "number" is a token (identifier-
-; like sequence) whose FIRST char is a digit. Token boundaries are detected
-; by SynIsIdChar (letters, digits, '_', '@', '?', '$') so e.g. asm labels
-; like @14, ?cpshd, $1000 stay un-painted as identifiers, not numbers.
-; Only paints chars still at SynBaseColor.
+; Paint complete numeric literals before the keyword pass. Supported forms:
+; decimal digits, #/$-prefixed hex digits, C-style 0x/0X hex digits, and an
+; attached leading +/- sign.
+; A candidate touching an identifier char is rejected as a whole, so #define
+; is not mistaken for a hex number while #BC is protected from keyword lookup.
 SynHighlightNumbers:
 	LD	A,(SynLineLen)
 	OR	A
 	RET	Z
 	LD	B,A				; B = remaining chars
 	LD	HL,(SynWorkBuf)
-	LD	D,#00				; D = in_token flag
-	LD	E,#00				; E = current token is number flag
 SynHNScan:
+	LD	A,B
+	OR	A
+	RET	Z
 	INC	HL
 	LD	A,(HL)
 	DEC	HL
 	LD	C,A
 	LD	A,(SynBaseColor)
 	CP	C
-	JR	NZ,SynHNPainted
+	JR	NZ,SynHNAdvance
 	LD	A,(HL)
-	PUSH	BC
-	PUSH	DE
-	CALL	SynIsIdChar			; CF=0 if id char, CF=1 if separator
-	POP	DE
-	POP	BC
-	JR	C,SynHNSeparator
-	; Identifier-class char at base color
-	LD	A,D
-	OR	A
-	JR	NZ,SynHNCont			; continuing existing token
-	; New token starts here. Check if first char is digit.
-	LD	A,(HL)
+	CP	'+'
+	JR	Z,SynHNTry
+	CP	'-'
+	JR	Z,SynHNTry
+	CP	'#'
+	JR	Z,SynHNTry
+	CP	'$'
+	JR	Z,SynHNTry
 	CP	'0'
-	JR	C,SynHNTokId			; not digit → identifier, not number
+	JR	C,SynHNCheckId
 	CP	'9'+1
-	JR	NC,SynHNTokId
-	; First char is digit → mark as number token, paint.
-	LD	D,#01
-	LD	E,#01
-	JR	SynHNPaintCh
-SynHNTokId:
-	; Identifier (non-numeric) start
-	LD	D,#01
-	LD	E,#00
-	JR	SynHNAdvance
-SynHNCont:
-	; Continuing existing token. Paint only if E=1 (number).
-	LD	A,E
+	JR	C,SynHNTry
+SynHNCheckId:
+	CALL	SynIsIdChar
+	JR	C,SynHNAdvance
+	; Skip a non-numeric identifier as one unit so digits inside it are never
+	; reconsidered as number starts.
+SynHNSkipId:
+	INC	HL
+	INC	HL
+	DEC	B
+	RET	Z
+	INC	HL
+	LD	A,(HL)
+	DEC	HL
+	LD	C,A
+	LD	A,(SynBaseColor)
+	CP	C
+	JR	NZ,SynHNScan
+	LD	A,(HL)
+	CALL	SynIsIdChar
+	JR	NC,SynHNSkipId
+	JR	SynHNScan
+SynHNTry:
+	CALL	SynNumberLength
 	OR	A
 	JR	Z,SynHNAdvance
-SynHNPaintCh:
-	INC	HL
+	LD	(SynTokenLen),A
+	LD	E,A
+	LD	D,#00
 	LD	A,(TmpColN)
-	LD	(HL),A
-	DEC	HL
-	JR	SynHNAdvance
-SynHNSeparator:
-	; Non-id char at base. End any token.
-	LD	D,#00
-	LD	E,#00
-	JR	SynHNAdvance
-SynHNPainted:
-	; Already painted (comment/string region). End token.
-	LD	D,#00
-	LD	E,#00
+	PUSH	HL
+	CALL	SynColorWord
+	POP	HL
+	ADD	HL,DE
+	ADD	HL,DE
+	LD	A,B
+	SUB	E
+	LD	B,A
+	JR	SynHNScan
 SynHNAdvance:
 	INC	HL
 	INC	HL
 	DEC	B
 	JR	NZ,SynHNScan
+	RET
+
+; Validate the numeric candidate at HL without painting it.
+; In: HL = char/attr pair, B = remaining chars.
+; Out: A = full literal length, or 0 if the complete token is not a number.
+;      HL and BC are preserved.
+SynNumberLength:
+	PUSH	HL
+	PUSH	BC
+	LD	C,B
+	LD	E,#00				; accepted length
+	LD	A,(HL)
+	CP	'+'
+	JR	Z,SynNLSign
+	CP	'-'
+	JR	NZ,SynNLBase
+SynNLSign:
+	INC	HL
+	INC	HL
+	DEC	C
+	INC	E
+	JR	Z,SynNLBad
+	LD	A,(HL)
+SynNLBase:
+	CP	'#'
+	JR	Z,SynNLHexPrefix
+	CP	'$'
+	JR	Z,SynNLHexPrefix
+	CP	'0'
+	JR	C,SynNLBad
+	CP	'9'+1
+	JR	NC,SynNLBad
+	CP	'0'
+	JR	NZ,SynNLDecLoop
+	; C/C++ hexadecimal prefix: 0x or 0X. Peek at the second character;
+	; ordinary zero-prefixed decimal values stay on the decimal path.
+	LD	A,C
+	CP	#03
+	JR	C,SynNLDecLoop			; need prefix plus at least one digit
+	INC	HL
+	INC	HL
+	LD	A,(HL)
+	CALL	SynToLower
+	CP	'x'
+	JR	NZ,SynNLZeroDec
+	INC	HL
+	INC	HL
+	DEC	C
+	DEC	C
+	INC	E
+	INC	E
+	LD	A,(HL)
+	CALL	SynIsHexDigit
+	JR	C,SynNLBad
+	JR	SynNLHexLoop
+SynNLZeroDec:
+	DEC	HL
+	DEC	HL
+SynNLDecLoop:
+	INC	HL
+	INC	HL
+	DEC	C
+	INC	E
+	JR	Z,SynNLOk
+	LD	A,(HL)
+	CP	'0'
+	JR	C,SynNLDecEnd
+	CP	'9'+1
+	JR	C,SynNLDecLoop
+SynNLDecEnd:
+	CALL	SynIsIdChar
+	JR	NC,SynNLBad			; e.g. 123abc is an identifier, not a number
+	JR	SynNLOk
+SynNLHexPrefix:
+	INC	HL
+	INC	HL
+	DEC	C
+	INC	E
+	JR	Z,SynNLBad			; standalone #/$
+	LD	A,(HL)
+	CALL	SynIsHexDigit
+	JR	C,SynNLBad			; prefix must be followed by a hex digit
+SynNLHexLoop:
+	INC	HL
+	INC	HL
+	DEC	C
+	INC	E
+	JR	Z,SynNLOk
+	LD	A,(HL)
+	CALL	SynIsHexDigit
+	JR	NC,SynNLHexLoop
+	CALL	SynIsIdChar
+	JR	NC,SynNLBad			; reject #define / $label as complete tokens
+SynNLOk:
+	LD	A,E
+	POP	BC
+	POP	HL
+	RET
+SynNLBad:
+	XOR	A
+	POP	BC
+	POP	HL
+	RET
+
+; CF=0 if A is an ASCII hexadecimal digit, CF=1 otherwise.
+SynIsHexDigit:
+	CP	'0'
+	JR	C,SynIHDNo
+	CP	'9'+1
+	JR	C,SynIHDYes
+	CALL	SynToLower
+	CP	'a'
+	JR	C,SynIHDNo
+	CP	'f'+1
+	JR	C,SynIHDYes
+SynIHDNo:
+	SCF
+	RET
+SynIHDYes:
+	OR	A
 	RET
 
 ; CF=0 if A is part of an identifier (letter/digit/'_'/'@'/'?'/'$').
@@ -916,6 +1074,19 @@ SynCollectWord:
 	LD	(SynTokenLen),A
 	LD	A,B
 	LD	C,A
+	LD	A,(HL)
+	CP	'#'
+	JR	NZ,SynCWLp
+	; '#' is allowed only as a leading keyword character. It remains a
+	; separator inside ordinary identifiers and can therefore represent
+	; C/C++ preprocessor words such as #include.
+	LD	(DE),A
+	INC	DE
+	INC	HL
+	INC	HL
+	DEC	C
+	LD	A,#01
+	LD	(SynTokenLen),A
 SynCWLp:
 	LD	A,C
 	OR	A
@@ -1153,26 +1324,35 @@ SynSeedBlockFromTop:
 	LD	A,(SynHasBlockCom)
 	OR	A
 	RET	Z
+	LD	DE,(AdrPage)
+	LD	(SynBlockTarget),DE
+	CALL	SynFindCachedBlock
+	RET	C
 	LD	IX,#8040
 	LD	HL,(UpLinePg)
 	LD	A,H
 	OR	L
-	RET	Z
+	JR	Z,SynSBTDone
 SynSBTLp:
 	LD	A,(IX+#00)
 	OR	A
 	RET	Z
 	PUSH	HL
+	CALL	SynCacheBlockIX
 	CALL	SynScanCompLine
 	POP	HL
 	DEC	HL
 	LD	A,H
 	OR	L
-	RET	Z
+	JR	Z,SynSBTDone
 	LD	C,(IX+#00)
 	LD	B,#00
 	ADD	IX,BC
 	JR	SynSBTLp
+SynSBTDone:
+	LD	IX,(SynBlockTarget)
+	CALL	SynCacheBlockIX
+	RET
 
 SynScanCompLine:
 	LD	A,(IX+#00)
@@ -1234,29 +1414,149 @@ SynSCStep:
 	JR	SynSCLp
 
 ; Seed SynCBlockOpen with state entering the cursor line (BegString).
-; Only runs for profiles that declare /*..*/ block comments. Walks #8040..BegString.
+; The recent-line cache makes normal cursor movement and one-line scrolling
+; constant-time. A full walk is only a fallback after a jump or cache reset.
 SynSeedBlockAtCursor:
 	XOR	A
 	LD	(SynCBlockOpen),A
 	LD	A,(SynHasBlockCom)
 	OR	A
 	RET	Z
-	LD	IX,#8040
 	LD	DE,(BegString)
+	LD	(SynBlockTarget),DE
+	CALL	SynFindCachedBlock
+	RET	C
+	LD	DE,(SynBlockTarget)
+	LD	IX,#8040
 SynSBACLp:
 	PUSH	IX
 	POP	HL
 	OR	A
 	SBC	HL,DE
-	RET	Z
+	JR	Z,SynSBACHit
 	LD	A,(IX+#00)
 	OR	A
 	RET	Z
+	CALL	SynCacheBlockIX
 	CALL	SynScanCompLine
 	LD	C,(IX+#00)
 	LD	B,#00
 	ADD	IX,BC
 	JR	SynSBACLp
+SynSBACHit:
+	CALL	SynCacheBlockIX
+	RET
+
+; Store the block-comment state entering the packed line at IX.
+; A 64-entry ring covers the current and previous editor viewports.
+SynCacheBlockIX:
+	LD	A,(SynHasBlockCom)
+	OR	A
+	RET	Z
+	PUSH	AF
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	A,(SynBlockCacheNext)
+	LD	E,A
+	LD	D,#00
+	LD	H,D
+	LD	L,E
+	ADD	HL,HL
+	ADD	HL,DE				; three bytes per entry
+	LD	DE,SynBlockCache
+	ADD	HL,DE
+	PUSH	IX
+	POP	DE
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	LD	A,(SynCBlockOpen)
+	LD	(HL),A
+	LD	A,(SynBlockCacheNext)
+	INC	A
+	AND	#3F
+	LD	(SynBlockCacheNext),A
+	POP	HL
+	POP	DE
+	POP	BC
+	POP	AF
+	RET
+
+; Find the entry state for SynBlockTarget. If the exact line is absent but
+; its predecessor is cached, scan only that one predecessor line.
+; Out: CF=1 if found, SynCBlockOpen set to the required entry state.
+SynFindCachedBlock:
+	LD	HL,SynBlockCache
+	LD	B,#40
+SynFCBLp:
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	LD	A,D
+	OR	E
+	JR	Z,SynFCBNext
+	LD	A,(SynBlockTarget)
+	CP	E
+	JR	NZ,SynFCBPred
+	LD	A,(SynBlockTarget+1)
+	CP	D
+	JR	Z,SynFCBExact
+SynFCBPred:
+	PUSH	HL
+	PUSH	DE
+	LD	A,(DE)
+	ADD	A,E
+	LD	E,A
+	JR	NC,SynFCBNoCarry
+	INC	D
+SynFCBNoCarry:
+	LD	A,(SynBlockTarget)
+	CP	E
+	JR	NZ,SynFCBNotPred
+	LD	A,(SynBlockTarget+1)
+	CP	D
+	JR	NZ,SynFCBNotPred
+	POP	IX
+	POP	HL
+	LD	A,(HL)
+	LD	(SynCBlockOpen),A
+	CALL	SynScanCompLine
+	LD	IX,(SynBlockTarget)
+	CALL	SynCacheBlockIX
+	SCF
+	RET
+SynFCBNotPred:
+	POP	DE
+	POP	HL
+SynFCBNext:
+	INC	HL
+	DJNZ	SynFCBLp
+	OR	A
+	RET
+SynFCBExact:
+	LD	A,(HL)
+	LD	(SynCBlockOpen),A
+	SCF
+	RET
+
+SynInvalidateBlockCache:
+	PUSH	BC
+	PUSH	DE
+	PUSH	HL
+	LD	HL,SynBlockCache
+	LD	DE,SynBlockCache+1
+	LD	BC,191
+	LD	(HL),#00
+	LDIR
+	XOR	A
+	LD	(SynBlockCacheNext),A
+	POP	HL
+	POP	DE
+	POP	BC
+	RET
 
 ; 2-slot LRU cache: profile data in the "active" slot is what runtime code
 ; reads (SynKeywords1, SynLineCom1, etc.). A second "backup" slot mirrors
@@ -1268,6 +1568,7 @@ SynEnsureProfileLoaded:
 	LD	DE,SynLoadedProf
 	CALL	SynStrEq
 	RET	Z				; already active — nothing to do
+	CALL	SynInvalidateBlockCache
 	; Active profile changes from here. Invalidate the per-render-pass
 	; language cache so the next paint re-detects via SynDetectLang
 	; instead of reusing the previous window's value.
@@ -1426,12 +1727,12 @@ SynLB_Other:
 	RET
 
 ; Counting-sort the keyword CSV in place (by first letter) and build the
-; first-letter index. Done once per profile load. SynFileBuf is used as
+; first-letter range index. Done once per profile load. SynFileBuf is used as
 ; scratch: bytes 0..26 hold per-bucket byte counts during phase 1, and
 ; bytes 27.. hold the sorted output buffer during phase 3.
 ;
 ; In:  HL = keyword buffer (ASCIIZ CSV)
-;      DE = idx buffer (54 bytes — 27 word entries)
+;      DE = idx buffer (56 bytes — 28 boundary pointers)
 SynBuildKwIndex:
 	LD	(SynBKISrc),HL
 	LD	(SynBKIIdx),DE
@@ -1590,7 +1891,7 @@ SynBKI3End:
 	ADD	HL,BC
 	LD	(HL),0
 SynBKI4Done:
-	; --- Phase 5: rebuild idx as absolute pointers (zone starts) ---
+	; --- Phase 5: rebuild idx as absolute range boundaries ---
 	; SynFileBuf[i] still holds the original byte count for bucket i.
 	LD	HL,(SynBKIIdx)
 	LD	DE,SynFileBuf
@@ -1598,88 +1899,60 @@ SynBKI4Done:
 	LD	A,#1B
 SynBKI5Lp:
 	EX	AF,AF'
-	LD	A,(DE)				; bucket size
-	INC	DE
-	OR	A
-	JR	Z,SynBKI5Empty
-	; Non-empty: idx[i] = BC (current running ptr); then BC += A
+	; idx[i] = current running pointer. Empty buckets naturally have
+	; identical start/end boundaries and need no special marker.
 	LD	(HL),C
 	INC	HL
 	LD	(HL),B
 	INC	HL
+	LD	A,(DE)				; bucket size
+	INC	DE
 	; BC += A (8-bit add to BC)
 	ADD	A,C
 	LD	C,A
 	JR	NC,SynBKI5NoC
 	INC	B
 SynBKI5NoC:
-	JR	SynBKI5Next
-SynBKI5Empty:
-	; Empty bucket: idx[i] = 0
-	LD	(HL),0
-	INC	HL
-	LD	(HL),0
-	INC	HL
-SynBKI5Next:
 	EX	AF,AF'
 	DEC	A
 	JR	NZ,SynBKI5Lp
+	; idx[27] is the exclusive end of the final bucket.
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
 	RET
 
-; Rebuild the first-letter index from already-sorted keyword data. Used
+; Rebuild the first-letter range index from already-sorted keyword data. Used
 ; after a slot swap (sort property is preserved by content swap, only
 ; pointers need to be rebuilt). Single O(N) pass.
 ;
 ; In:  HL = sorted keyword buffer (ASCIIZ CSV)
-;      DE = idx buffer (54 bytes)
+;      DE = idx buffer (56 bytes)
 SynRebuildKwIndex:
-	LD	(SynBKISrc),HL
-	LD	(SynBKIIdx),DE
-	; Clear idx (54 bytes)
-	PUSH	DE
-	POP	HL
-	LD	D,H
-	LD	E,L
-	INC	DE
-	LD	BC,53
-	LD	(HL),0
-	LDIR
-	LD	HL,(SynBKISrc)
-	LD	A,(HL)
-	OR	A
-	RET	Z
-	LD	A,#FF
-	LD	(SynBKIPrev),A			; prev bucket (none)
+	LD	C,#00				; next boundary index to emit
 SynRBI_Lp:
 	LD	A,(HL)
 	OR	A
-	RET	Z
-	LD	(SynBKICur),HL
+	JR	Z,SynRBI_End
 	CALL	SynLetterBucket
-	LD	C,A
-	LD	A,(SynBKIPrev)
+	LD	B,A				; bucket of current word
+SynRBI_Fill:
+	LD	A,B
 	CP	C
-	JR	Z,SynRBI_Skip			; same bucket as previous word — already indexed
-	LD	A,C
-	LD	(SynBKIPrev),A
-	; idx[bucket] = SynBKICur
-	LD	HL,(SynBKIIdx)
-	LD	A,C
-	ADD	A,A
-	LD	E,A
-	LD	D,#00
-	ADD	HL,DE
-	LD	DE,(SynBKICur)
-	LD	(HL),E
-	INC	HL
-	LD	(HL),D
-SynRBI_Skip:
+	JR	C,SynRBI_SkipBody
+	LD	A,L
+	LD	(DE),A
+	INC	DE
+	LD	A,H
+	LD	(DE),A
+	INC	DE
+	INC	C
+	JR	SynRBI_Fill
 	; Advance HL to next word
-	LD	HL,(SynBKICur)
 SynRBI_SkipBody:
 	LD	A,(HL)
 	OR	A
-	RET	Z
+	JR	Z,SynRBI_End
 	CP	','
 	JR	Z,SynRBI_Next
 	INC	HL
@@ -1687,6 +1960,19 @@ SynRBI_SkipBody:
 SynRBI_Next:
 	INC	HL				; consume ','
 	JR	SynRBI_Lp
+SynRBI_End:
+	; Fill all remaining bucket boundaries plus idx[27] with the end pointer.
+	LD	A,C
+	CP	#1C
+	RET	Z
+	LD	A,L
+	LD	(DE),A
+	INC	DE
+	LD	A,H
+	LD	(DE),A
+	INC	DE
+	INC	C
+	JR	SynRBI_End
 
 ; Compare null-terminated strings at HL and DE. Z if equal, NZ if not.
 ; Preserves HL, DE.
@@ -1965,11 +2251,11 @@ SynLSWNo:
 ; terminator so DE can stop at BC-1 safely.
 SynCopyValueKw1:
 	LD	DE,SynKeywords1
-	LD	BC,SynKeywords1+512
+	LD	BC,SynKeywords1+384
 	JR	SynCopyValueCommon
 SynCopyValueKw2:
 	LD	DE,SynKeywords2
-	LD	BC,SynKeywords2+256
+	LD	BC,SynKeywords2+128
 SynCopyValueCommon:
 	; If buffer non-empty, advance DE to its null terminator and overwrite
 	; the null with a separator before appending.
@@ -2258,7 +2544,6 @@ SynRenderLang:	DEFB	#00
 SynLineLen:	DEFB	#00
 SynLineAttr:	DEFB	#00
 SynTokenLen:	DEFB	#00
-SynKwColor:	DEFB	#00
 SynProfHnd:	DEFB	#00
 SynLFRet:	DEFB	#01
 SynIndexLoaded:	DEFB	#00		; 0=not attempted, 1=loaded ok, #FF=load failed
@@ -2271,11 +2556,13 @@ SynBKISrc:	DEFW	#0000		; scratch for SynBuildKwIndex / SynRebuildKwIndex
 SynBKIIdx:	DEFW	#0000
 SynBKICur:	DEFW	#0000
 SynBKIBkt:	DEFB	#00
-SynBKIPrev:	DEFB	#00
+SynKwEnd:	DEFW	#0000		; exclusive end of current keyword bucket
+SynBlockTarget:	DEFW	#0000
+SynBlockCacheNext:	DEFB	#00
+SynBlockCache:	DEFS	192,0		; 64 entries: line pointer + entry state
 SynToken:	DEFS	24,0
 SynNameBuf:	DEFS	64,0
 SynWorkBuf:	DEFW	#0000
-SynKwPtr:	DEFW	#0000
 SynProfileName:	DEFS	20,0		; profile file name from INDEX.LST (e.g. "c.syn")
 SynProfilePath:	DEFS	32,0		; constructed full path "SYNTAX\<name>"
 
@@ -2299,11 +2586,11 @@ SynSlotTotalBytes	EQU	SynActiveSlotEnd - SynActiveSlot
 ; --- First-letter index for the active slot. NOT part of the swap region;
 ;     after a swap, the new active data is already sorted (sort sticks to
 ;     content), so we just rebuild these pointers in a single O(N) pass.
-;     Each index is 27 word entries: 26 letter buckets ('a'..'z') plus one
-;     for non-letter starts. Each entry holds the absolute pointer to the
-;     first keyword in that bucket, or 0 if the bucket is empty.
-SynKw1Idx:	DEFS	54,0
-SynKw2Idx:	DEFS	54,0
+;     Each index is 28 word boundaries: 27 bucket starts (26 letters plus
+;     non-letter starts) and one exclusive end pointer. Empty buckets have
+;     equal adjacent boundaries.
+SynKw1Idx:	DEFS	56,0
+SynKw2Idx:	DEFS	56,0
 
 ; SynBackupSlot, SynFileBuf and SynIndexBuf live in Dialog_Windows_PG2 (see
 ; Dialog_Windows/Asmsetup.asm). They are accessed via SynPageDp2In /

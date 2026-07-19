@@ -4,4 +4,4 @@ line_comment2=/*
 string_delims="'
 brackets=()[]{}<>
 keywords=auto,break,case,char,const,continue,default,do,double,else,enum,extern,float,for,goto,if,inline,int,long,register,restrict,return,short,signed,sizeof,static,struct,switch,typedef,union,unsigned,void,volatile,while
-keywords2=define,elif,else,endif,error,if,ifdef,ifndef,include,line,pragma,undef
+keywords2=#define,#elif,#else,#endif,#error,#if,#ifdef,#ifndef,#include,#line,#pragma,#undef
