@@ -349,6 +349,7 @@ ResCurs	LD	A,(CurFlag)
 	INCLUDE	'Function3.asm'
 	INCLUDE	'TextIO.asm'
 FILLend_KodeMain	EQU $
+	ASSERT	FILLend_KodeMain<=#7700
 ;---------------------------------------------------------------------/*/
  ; !fixit
 	; Include "asm2pass.z80",#18

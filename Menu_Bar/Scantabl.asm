@@ -694,7 +694,7 @@ CtrlTab:
 	DB	#00,156		;50
 	DB	#00,118		; 51 ;pgdn
 	DB	#00,150		;52
-	DB	#00,154		; 53 ;del
+	BLOCK	2		; 53 ;Ctrl+Del unused
 
 	DB	0x2A,#09		;54
 	BLOCK	96			;55-84

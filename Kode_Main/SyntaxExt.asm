@@ -399,17 +399,19 @@ SynECL_End:
 	OR	A
 	RET
 
-; Scan for SynLineCom1 / SynLineCom2 patterns in the current line and paint
-; from the match to end of line. If the profile declares a /*..*/ block
-; comment (SynHasBlockCom=1), delegate to SynComC which handles both the
-; "//" line comment and block state tracking.
+; Scan for SynLineCom1 / SynLineCom2 patterns in the current line and paint.
+; SynHasBlockCom=1 selects C /*..*/ comments; #02 selects Pascal comments.
 SynHighlightComments:
 	LD	A,(SynLang)
 	OR	A
 	RET	Z
 	LD	A,(SynHasBlockCom)
 	OR	A
-	JR	NZ,SynComC
+	JR	Z,SynHCLine
+	CP	#02
+	JP	Z,SynComPas
+	JR	SynComC
+SynHCLine:
 	LD	HL,SynLineCom1
 	CALL	SynPaintFromStr
 	LD	HL,SynLineCom2
@@ -476,6 +478,94 @@ SynCCNext:
 	INC	HL
 	DEC	B
 	JR	SynCCLp
+
+; Pascal block comments: {...} and (*...*).
+SynComPas:
+	LD	HL,(SynWorkBuf)
+	LD	A,(SynLineLen)
+	LD	B,A
+	LD	A,(SynCBlockOpen)
+	OR	A
+	JR	Z,SynCPScan
+	LD	C,A
+	CALL	SynPaintPasBlock
+	RET	NC
+	XOR	A
+	LD	(SynCBlockOpen),A
+SynCPScan:
+	LD	A,B
+	OR	A
+	RET	Z
+	LD	A,(HL)
+	CP	'{'
+	JR	Z,SynCPBrace
+	CP	'('
+	JR	NZ,SynCPNext
+	LD	A,B
+	CP	#02
+	JR	C,SynCPNext
+	INC	HL
+	INC	HL
+	LD	A,(HL)
+	CP	'*'
+	DEC	HL
+	DEC	HL
+	JR	NZ,SynCPNext
+	LD	C,#02
+	JR	SynCPOpen
+SynCPBrace:
+	LD	C,#01
+SynCPOpen:
+	CALL	SynPaintPasBlock
+	JR	C,SynCPScan
+	LD	A,C
+	LD	(SynCBlockOpen),A
+	RET
+SynCPNext:
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	SynCPScan
+
+; In: HL = first comment character, B = remaining chars, C = #01 for {}
+; or #02 for (* *). Out: CF set if the close delimiter was found.
+SynPaintPasBlock:
+	LD	A,(TmpColC)
+	LD	D,A
+SynPPBLp:
+	LD	A,B
+	OR	A
+	RET	Z
+	LD	A,(HL)
+	LD	E,A
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	DEC	B
+	LD	A,C
+	CP	#01
+	JR	NZ,SynPPBStar
+	LD	A,E
+	CP	'}'
+	JR	NZ,SynPPBLp
+	SCF
+	RET
+SynPPBStar:
+	LD	A,E
+	CP	'*'
+	JR	NZ,SynPPBLp
+	LD	A,B
+	OR	A
+	JR	Z,SynPPBLp
+	LD	A,(HL)
+	CP	')'
+	JR	NZ,SynPPBLp
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	DEC	B
+	SCF
+	RET
 
 SynPaintToEnd:
 	LD	A,(TmpColC)
@@ -1355,6 +1445,9 @@ SynSBTDone:
 	RET
 
 SynScanCompLine:
+	LD	A,(SynHasBlockCom)
+	CP	#02
+	JP	Z,SynScanPasCompLine
 	LD	A,(IX+#00)
 	CP	#03
 	RET	C
@@ -1412,6 +1505,76 @@ SynSCStep:
 	INC	HL
 	DEC	B
 	JR	SynSCLp
+
+; Update Pascal block-comment state for one packed source line.
+SynScanPasCompLine:
+	LD	A,(IX+#00)
+	CP	#03
+	RET	C
+	SUB	#03
+	LD	B,A
+	PUSH	IX
+	POP	HL
+	INC	HL
+	INC	HL
+SynSCPLp:
+	LD	A,B
+	OR	A
+	RET	Z
+	LD	A,(SynCBlockOpen)
+	OR	A
+	JR	Z,SynSCPOut
+	CP	#01
+	JR	Z,SynSCPBrace
+	LD	A,B
+	CP	#02
+	RET	C
+	LD	A,(HL)
+	CP	'*'
+	JR	NZ,SynSCPStep
+	INC	HL
+	DEC	B
+	LD	A,(HL)
+	CP	')'
+	JR	NZ,SynSCPLp
+	XOR	A
+	LD	(SynCBlockOpen),A
+	INC	HL
+	DEC	B
+	JR	SynSCPLp
+SynSCPBrace:
+	LD	A,(HL)
+	CP	'}'
+	JR	NZ,SynSCPStep
+	XOR	A
+	LD	(SynCBlockOpen),A
+	JR	SynSCPStep
+SynSCPOut:
+	LD	A,(HL)
+	CP	'{'
+	JR	Z,SynSCPSetBrace
+	CP	'('
+	JR	NZ,SynSCPStep
+	LD	A,B
+	CP	#02
+	JR	C,SynSCPStep
+	INC	HL
+	DEC	B
+	LD	A,(HL)
+	CP	'*'
+	JR	NZ,SynSCPLp
+	LD	A,#02
+	LD	(SynCBlockOpen),A
+	INC	HL
+	DEC	B
+	JR	SynSCPLp
+SynSCPSetBrace:
+	LD	A,#01
+	LD	(SynCBlockOpen),A
+SynSCPStep:
+	INC	HL
+	DEC	B
+	JR	SynSCPLp
 
 ; Seed SynCBlockOpen with state entering the cursor line (BegString).
 ; The recent-line cache makes normal cursor movement and one-line scrolling
@@ -1664,7 +1827,7 @@ SynLoadProfile:
 	; SLOT3 around all SynFileBuf accesses.
 	CALL	SynPageDp2In
 	CALL	SynParseProfileBuf
-	CALL	SynDetectBlockCom
+	CALL	SynDetectBlockComPg2
 	LD	A,(SynCaseSensitive)
 	OR	A
 	JR	NZ,SynLP_NoLower
@@ -1724,202 +1887,6 @@ SynLetterBucket:
 	RET
 SynLB_Other:
 	LD	A,26
-	RET
-
-; Counting-sort the keyword CSV in place (by first letter) and build the
-; first-letter range index. Done once per profile load. SynFileBuf is used as
-; scratch: bytes 0..26 hold per-bucket byte counts during phase 1, and
-; bytes 27.. hold the sorted output buffer during phase 3.
-;
-; In:  HL = keyword buffer (ASCIIZ CSV)
-;      DE = idx buffer (56 bytes — 28 boundary pointers)
-SynBuildKwIndex:
-	LD	(SynBKISrc),HL
-	LD	(SynBKIIdx),DE
-	LD	A,(HL)
-	OR	A
-	RET	Z
-	; --- Phase 0: clear scratch counters (27 bytes at SynFileBuf) ---
-	LD	HL,SynFileBuf
-	LD	D,H
-	LD	E,L
-	INC	DE
-	LD	BC,26
-	LD	(HL),0
-	LDIR
-	; --- Phase 1: count bytes per bucket ---
-	LD	HL,(SynBKISrc)
-SynBKI1Lp:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynBKI1End
-	LD	(SynBKICur),HL
-	CALL	SynLetterBucket
-	LD	(SynBKIBkt),A
-	LD	HL,(SynBKICur)
-	LD	B,#00				; word length
-SynBKI1WordLp:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynBKI1WordEnd
-	CP	','
-	JR	Z,SynBKI1WordEnd
-	INC	HL
-	INC	B
-	JR	SynBKI1WordLp
-SynBKI1WordEnd:
-	; B = word_len. Add (B+1) to SynFileBuf[bucket].
-	PUSH	HL
-	LD	A,(SynBKIBkt)
-	LD	HL,SynFileBuf
-	LD	E,A
-	LD	D,#00
-	ADD	HL,DE
-	LD	A,(HL)
-	ADD	A,B
-	INC	A
-	LD	(HL),A
-	POP	HL
-	; Skip ',' if present
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynBKI1End
-	INC	HL
-	JR	SynBKI1Lp
-SynBKI1End:
-	; --- Phase 2: prefix-sum byte counters into idx as 27 word entries ---
-	LD	HL,(SynBKIIdx)
-	LD	DE,SynFileBuf
-	LD	BC,#0000			; cumulative
-	LD	A,#1B				; 27 entries
-SynBKI2Lp:
-	LD	(HL),C
-	INC	HL
-	LD	(HL),B
-	INC	HL
-	EX	AF,AF'
-	LD	A,(DE)
-	INC	DE
-	ADD	A,C
-	LD	C,A
-	JR	NC,SynBKI2NoCarry
-	INC	B
-SynBKI2NoCarry:
-	EX	AF,AF'
-	DEC	A
-	JR	NZ,SynBKI2Lp
-	; --- Phase 3: scatter words from src into scratch[27..] ---
-	LD	HL,(SynBKISrc)
-SynBKI3Lp:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynBKI3End
-	LD	(SynBKICur),HL
-	CALL	SynLetterBucket
-	LD	(SynBKIBkt),A
-	; idx entry addr = idx + 2*bucket
-	LD	HL,(SynBKIIdx)
-	ADD	A,A
-	LD	E,A
-	LD	D,#00
-	ADD	HL,DE
-	; HL = idx entry addr; read current write offset (relative to scratch+27)
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)
-	DEC	HL
-	PUSH	HL				; save idx entry addr
-	; Compute scratch dst = SynFileBuf+27 + offset
-	LD	HL,SynFileBuf+27
-	ADD	HL,DE
-	LD	DE,(SynBKICur)			; DE = src word ptr
-	LD	BC,#0000			; bytes copied
-SynBKI3CpLp:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynBKI3CpEnd
-	CP	','
-	JR	Z,SynBKI3CpEnd
-	LD	(HL),A
-	INC	HL
-	INC	DE
-	INC	BC
-	JR	SynBKI3CpLp
-SynBKI3CpEnd:
-	; Append separator ','
-	LD	A,','
-	LD	(HL),A
-	INC	BC				; BC = word_len + 1
-	; Update idx entry: add BC
-	POP	HL
-	LD	A,(HL)
-	ADD	A,C
-	LD	(HL),A
-	INC	HL
-	LD	A,(HL)
-	ADC	A,B
-	LD	(HL),A
-	; Continue with next word (DE points past current word in src)
-	EX	DE,HL				; HL = src ptr (just past word body)
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynBKI3End
-	INC	HL				; consume ','
-	JR	SynBKI3Lp
-SynBKI3End:
-	; --- Phase 4: copy scratch[27..27+total] back to src; total = idx[26] ---
-	LD	HL,(SynBKIIdx)
-	LD	BC,52				; 26 buckets * 2 bytes (start of bucket 26)
-	ADD	HL,BC
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)
-	; DE = total bytes after phase 3
-	LD	A,D
-	OR	E
-	JR	Z,SynBKI4Done
-	PUSH	DE
-	LD	HL,SynFileBuf+27
-	LD	DE,(SynBKISrc)
-	POP	BC
-	PUSH	BC
-	LDIR
-	POP	BC
-	; Replace last ',' with NUL
-	LD	HL,(SynBKISrc)
-	DEC	BC
-	ADD	HL,BC
-	LD	(HL),0
-SynBKI4Done:
-	; --- Phase 5: rebuild idx as absolute range boundaries ---
-	; SynFileBuf[i] still holds the original byte count for bucket i.
-	LD	HL,(SynBKIIdx)
-	LD	DE,SynFileBuf
-	LD	BC,(SynBKISrc)			; BC = running zone-start ptr
-	LD	A,#1B
-SynBKI5Lp:
-	EX	AF,AF'
-	; idx[i] = current running pointer. Empty buckets naturally have
-	; identical start/end boundaries and need no special marker.
-	LD	(HL),C
-	INC	HL
-	LD	(HL),B
-	INC	HL
-	LD	A,(DE)				; bucket size
-	INC	DE
-	; BC += A (8-bit add to BC)
-	ADD	A,C
-	LD	C,A
-	JR	NC,SynBKI5NoC
-	INC	B
-SynBKI5NoC:
-	EX	AF,AF'
-	DEC	A
-	JR	NZ,SynBKI5Lp
-	; idx[27] is the exclusive end of the final bucket.
-	LD	(HL),C
-	INC	HL
-	LD	(HL),B
 	RET
 
 ; Rebuild the first-letter range index from already-sorted keyword data. Used
@@ -2033,26 +2000,6 @@ SynSC20_End:
 	XOR	A
 	LD	(DE),A
 SynSC20_Ret:
-	RET
-
-; Set SynHasBlockCom=1 iff SynLineCom2 contains exactly the two chars "/*".
-SynDetectBlockCom:
-	XOR	A
-	LD	(SynHasBlockCom),A
-	LD	HL,SynLineCom2
-	LD	A,(HL)
-	CP	'/'
-	RET	NZ
-	INC	HL
-	LD	A,(HL)
-	CP	'*'
-	RET	NZ
-	INC	HL
-	LD	A,(HL)
-	OR	A
-	RET	NZ
-	LD	A,#01
-	LD	(SynHasBlockCom),A
 	RET
 
 ; Load HL=<filename path> into (SynLFDst) for up to (SynLFMax) bytes,

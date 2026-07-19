@@ -102,6 +102,14 @@ SysComb	LD	A,(InsertMode)
 	INC	HL
 	LD	E,(HL)		;Key combination
 	LD	A,E
+	CP	83		; Del removes the selected block
+	JR	NZ,SysChkMark
+	LD	HL,(EquipMr)
+	LD	A,H
+	OR	L
+	JP	NZ,ClearBlock
+	LD	A,E		; No selection: keep normal character delete
+SysChkMark:
 	CP	142		; Shift+Up
 	JR	Z,SysNoClr
 	CP	144		; Shift+Down

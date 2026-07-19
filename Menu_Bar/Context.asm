@@ -191,12 +191,11 @@ slMain:	DEFB cmHelpDesk,		"~F1~ Help",	0,#3B
 	DEFB cmReplace,				0,#42
 	DEFB cmSearchAg,				0,90
 	DEFB cmGoToLine,				0,91
-	DEFB cmCut,				0,151
-	DEFB cmCutAppnd,				0,#03
-	DEFB cmCopy,				0,150
-	DEFB cmAppend,				0,#01
-	DEFB cmPaste,				0,153
-	DEFB cmClear,				0,154
+	DEFB cmCut,				0,24
+	DEFB cmCutAppnd,				0,151
+	DEFB cmCopy,				0,#03
+	DEFB cmAppend,				0,150
+	DEFB cmPaste,				0,27
 	DEFB #FF
 
 sl01:	DEFB cmHelpBox,		"~F1~ Help",	0,#3B

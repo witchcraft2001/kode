@@ -573,12 +573,12 @@ CloseLm	POP	DE
 LocPos	DEFB	0,0,0
 	DEFW	LocalWn
 
-LocalWn	DEFB	cmCut,"~C~ut           Shift+Del",0,CTcut
-	DEFB   cmCutAppnd,"C~u~t&Append       Ctrl+C",0,CTcutapp
-	DEFB	cmCopy,"C~o~py           Ctrl+Ins",0,CTcopy
-	DEFB	cmAppend,"~A~ppend           Ctrl+A",0,CTappnd
-	DEFB	cmPaste,"~P~aste         Shift+Ins",0,CTpaste
-	DEFB	cmClear,"C~l~ear          Ctrl+Del",0,CTclear
+LocalWn	DEFB	cmCut,"~C~ut              Ctrl+X",0,CTcut
+	DEFB   cmCutAppnd,"C~u~t&Append    Shift+Del",0,CTcutapp
+	DEFB	cmCopy,"C~o~py             Ctrl+C",0,CTcopy
+	DEFB	cmAppend,"~A~ppend         Ctrl+Ins",0,CTappnd
+	DEFB	cmPaste,"~P~aste            Ctrl+V",0,CTpaste
+	DEFB	cmClear,"C~l~ear               Del",0,CTclear
 	DEFB	#FF
 ;
  _mCollectInfo_addEnd

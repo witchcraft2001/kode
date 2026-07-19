@@ -1,0 +1,8 @@
+; Turbo Pascal / TPascal
+case_sensitive=0
+line_comment2={
+string_delims='
+brackets=()[]{}<>
+keywords=absolute,and,array,assembler,begin,case,const,constructor,destructor,div,do,downto,else,end,external,file,for,forward,function,goto,if,implementation,in,inline,interface,label,mod,nil,not
+keywords=object,of,or,packed,procedure,program,record,repeat,set,then,to,type,unit,until,uses,var,virtual,while,with
+keywords2=boolean,byte,char,integer,longint,real,string,text,word,true,false,assign,eof,read,readln,reset,rewrite,write,writeln

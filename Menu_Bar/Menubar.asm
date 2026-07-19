@@ -366,6 +366,13 @@ MBcbkey	INC	HL
 	JP	Z,MBhome
 	CP	79	;End
 	JP	Z,MBend
+	; Top-menu accelerators share numeric codes with some Ctrl+letter keys.
+	; Match them only for a real Alt combination (what+1, bit 3), so e.g.
+	; Alt+O opens Options while Ctrl+X remains available for Cut.
+	DEC	HL
+	BIT	3,(HL)
+	INC	HL
+	JP	Z,MenuExt
 	LD	IX,BarTabl-5
 	LD	BC,#0005
 	LD	H,B
@@ -626,12 +633,12 @@ FileWin	DEFB	cmNew,"~N~ew           F4",0,CTnew
 	DEFB	cmExit,"~E~xit       Alt+X",0,CTexit
 	DEFB	#FF
 
-EditWin	DEFB	cmCut,"~C~ut           Shift+Del",0,CTcut
-	DEFB   cmCutAppnd,"C~u~t&Append       Ctrl+C",0,CTcutapp
-	DEFB	cmCopy,"C~o~py           Ctrl+Ins",0,CTcopy
-	DEFB	cmAppend,"~A~ppend           Ctrl+A",0,CTappnd
-	DEFB	cmPaste,"~P~aste         Shift+Ins",0,CTpaste
-	DEFB	cmClear,"C~l~ear          Ctrl+Del",0,CTclear
+EditWin	DEFB	cmCut,"~C~ut              Ctrl+X",0,CTcut
+	DEFB   cmCutAppnd,"C~u~t&Append    Shift+Del",0,CTcutapp
+	DEFB	cmCopy,"C~o~py             Ctrl+C",0,CTcopy
+	DEFB	cmAppend,"~A~ppend         Ctrl+Ins",0,CTappnd
+	DEFB	cmPaste,"~P~aste            Ctrl+V",0,CTpaste
+	DEFB	cmClear,"C~l~ear               Del",0,CTclear
 	DEFB	#FF
 
 SrchWin	DEFB	cmFind,"~F~ind...              F7",0,CTfind

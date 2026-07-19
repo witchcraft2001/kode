@@ -910,6 +910,238 @@ SynFileBuf:	BLOCK	640,0
 SynIndexBuf:	BLOCK	256,0
 
 ;[]===========================================================[]
+; Pascal syntax scanners are kept in this cold page because KodeMain must
+; remain below #7700 (the EXE startup trampoline occupies #F700/#7700).
+; Called while Dialog_Windows_PG2 is already mapped by SynLoadProfile.
+SynDetectBlockComPg2:
+	XOR	A
+	LD	(SynHasBlockCom),A
+	LD	HL,SynLineCom2
+	LD	A,(HL)
+	CP	'/'
+	JR	NZ,SynDetectBlockPasPg2
+	INC	HL
+	LD	A,(HL)
+	CP	'*'
+	JR	NZ,SynDetectBlockPasPg2
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	JR	NZ,SynDetectBlockPasPg2
+	LD	A,#01
+	LD	(SynHasBlockCom),A
+	RET
+SynDetectBlockPasPg2:
+	LD	HL,SynLineCom2
+	LD	A,(HL)
+	CP	'{'
+	RET	NZ
+	INC	HL
+	LD	A,(HL)
+	OR	A
+	RET	NZ
+	LD	A,#02
+	LD	(SynHasBlockCom),A
+	RET
+
+; Counting-sort the keyword CSV in place (by first letter) and build the
+; first-letter range index. Done once per profile load. SynFileBuf is used as
+; scratch: bytes 0..26 hold per-bucket byte counts during phase 1, and
+; bytes 27.. hold the sorted output buffer during phase 3.
+;
+; In:  HL = keyword buffer (ASCIIZ CSV)
+;      DE = idx buffer (56 bytes — 28 boundary pointers)
+SynBuildKwIndex:
+	LD	(SynBKISrc),HL
+	LD	(SynBKIIdx),DE
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	; --- Phase 0: clear scratch counters (27 bytes at SynFileBuf) ---
+	LD	HL,SynFileBuf
+	LD	D,H
+	LD	E,L
+	INC	DE
+	LD	BC,26
+	LD	(HL),0
+	LDIR
+	; --- Phase 1: count bytes per bucket ---
+	LD	HL,(SynBKISrc)
+SynBKI1Lp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI1End
+	LD	(SynBKICur),HL
+	CALL	SynLetterBucket
+	LD	(SynBKIBkt),A
+	LD	HL,(SynBKICur)
+	LD	B,#00				; word length
+SynBKI1WordLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI1WordEnd
+	CP	','
+	JR	Z,SynBKI1WordEnd
+	INC	HL
+	INC	B
+	JR	SynBKI1WordLp
+SynBKI1WordEnd:
+	; B = word_len. Add (B+1) to SynFileBuf[bucket].
+	PUSH	HL
+	LD	A,(SynBKIBkt)
+	LD	HL,SynFileBuf
+	LD	E,A
+	LD	D,#00
+	ADD	HL,DE
+	LD	A,(HL)
+	ADD	A,B
+	INC	A
+	LD	(HL),A
+	POP	HL
+	; Skip ',' if present
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI1End
+	INC	HL
+	JR	SynBKI1Lp
+SynBKI1End:
+	; --- Phase 2: prefix-sum byte counters into idx as 27 word entries ---
+	LD	HL,(SynBKIIdx)
+	LD	DE,SynFileBuf
+	LD	BC,#0000			; cumulative
+	LD	A,#1B				; 27 entries
+SynBKI2Lp:
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
+	INC	HL
+	EX	AF,AF'
+	LD	A,(DE)
+	INC	DE
+	ADD	A,C
+	LD	C,A
+	JR	NC,SynBKI2NoCarry
+	INC	B
+SynBKI2NoCarry:
+	EX	AF,AF'
+	DEC	A
+	JR	NZ,SynBKI2Lp
+	; --- Phase 3: scatter words from src into scratch[27..] ---
+	LD	HL,(SynBKISrc)
+SynBKI3Lp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI3End
+	LD	(SynBKICur),HL
+	CALL	SynLetterBucket
+	LD	(SynBKIBkt),A
+	; idx entry addr = idx + 2*bucket
+	LD	HL,(SynBKIIdx)
+	ADD	A,A
+	LD	E,A
+	LD	D,#00
+	ADD	HL,DE
+	; HL = idx entry addr; read current write offset (relative to scratch+27)
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	DEC	HL
+	PUSH	HL				; save idx entry addr
+	; Compute scratch dst = SynFileBuf+27 + offset
+	LD	HL,SynFileBuf+27
+	ADD	HL,DE
+	LD	DE,(SynBKICur)			; DE = src word ptr
+	LD	BC,#0000			; bytes copied
+SynBKI3CpLp:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynBKI3CpEnd
+	CP	','
+	JR	Z,SynBKI3CpEnd
+	LD	(HL),A
+	INC	HL
+	INC	DE
+	INC	BC
+	JR	SynBKI3CpLp
+SynBKI3CpEnd:
+	; Append separator ','
+	LD	A,','
+	LD	(HL),A
+	INC	BC				; BC = word_len + 1
+	; Update idx entry: add BC
+	POP	HL
+	LD	A,(HL)
+	ADD	A,C
+	LD	(HL),A
+	INC	HL
+	LD	A,(HL)
+	ADC	A,B
+	LD	(HL),A
+	; Continue with next word (DE points past current word in src)
+	EX	DE,HL				; HL = src ptr (just past word body)
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynBKI3End
+	INC	HL				; consume ','
+	JR	SynBKI3Lp
+SynBKI3End:
+	; --- Phase 4: copy scratch[27..27+total] back to src; total = idx[26] ---
+	LD	HL,(SynBKIIdx)
+	LD	BC,52				; 26 buckets * 2 bytes (start of bucket 26)
+	ADD	HL,BC
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	; DE = total bytes after phase 3
+	LD	A,D
+	OR	E
+	JR	Z,SynBKI4Done
+	PUSH	DE
+	LD	HL,SynFileBuf+27
+	LD	DE,(SynBKISrc)
+	POP	BC
+	PUSH	BC
+	LDIR
+	POP	BC
+	; Replace last ',' with NUL
+	LD	HL,(SynBKISrc)
+	DEC	BC
+	ADD	HL,BC
+	LD	(HL),0
+SynBKI4Done:
+	; --- Phase 5: rebuild idx as absolute range boundaries ---
+	; SynFileBuf[i] still holds the original byte count for bucket i.
+	LD	HL,(SynBKIIdx)
+	LD	DE,SynFileBuf
+	LD	BC,(SynBKISrc)			; BC = running zone-start ptr
+	LD	A,#1B
+SynBKI5Lp:
+	EX	AF,AF'
+	; idx[i] = current running pointer. Empty buckets naturally have
+	; identical start/end boundaries and need no special marker.
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
+	INC	HL
+	LD	A,(DE)				; bucket size
+	INC	DE
+	; BC += A (8-bit add to BC)
+	ADD	A,C
+	LD	C,A
+	JR	NC,SynBKI5NoC
+	INC	B
+SynBKI5NoC:
+	EX	AF,AF'
+	DEC	A
+	JR	NZ,SynBKI5Lp
+	; idx[27] is the exclusive end of the final bucket.
+	LD	(HL),C
+	INC	HL
+	LD	(HL),B
+	RET
+
+
+;[]===========================================================[]
 SetupBuff:
 	DEFW	#FFFF
 ;

@@ -17,5 +17,6 @@ Notes:
 - Inside a key value, '#' is literal and needs no escaping. For example:
   keywords2=#define,#ifdef,#include
 - A leading '#' is supported as part of a keyword token.
+- `line_comment2={` enables Pascal block comments `{...}` and `(*...*)`.
 - makefile without extension uses syntax/makefile.syn.
 - Any other file uses syntax/<extension>.syn.
