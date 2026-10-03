@@ -196,6 +196,8 @@ slMain:	DEFB cmHelpDesk,		"~F1~ Help",	0,#3B
 	DEFB cmCopy,				0,#03
 	DEFB cmAppend,				0,150
 	DEFB cmPaste,				0,27
+	DEFB cmCompile,				0,67	; F9 - Build
+	DEFB cmRun,				0,102	; Ctrl+F9 - Run
 	DEFB #FF
 
 sl01:	DEFB cmHelpBox,		"~F1~ Help",	0,#3B
@@ -274,20 +276,20 @@ sl13:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB " text line"
 	DEFB #FF
 sl14:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," Run compiled"
-	DEFB " program"
+	DEFB Txt,#B3," Run project via RUN.BAT"
+	DEFB " or MAKEFILE run target"
 	DEFB #FF
 sl15:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," Set options for"
-	DEFB " program launch"
+	DEFB Txt,#B3," Set parameters passed to"
+	DEFB " RUN.BAT (this session)"
 	DEFB #FF
 sl16:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," Compile current"
-	DEFB " text file"
+	DEFB Txt,#B3," Build project via"
+	DEFB " BUILD.BAT or MAKEFILE"
 	DEFB #FF
 sl17:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," Compile current"
-	DEFB " text file to disk as .exe"
+	DEFB Txt,#B3," Build a selected"
+	DEFB " MAKEFILE target"
 	DEFB #FF
 sl18:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," Select from text files"
@@ -298,8 +300,8 @@ sl19:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB " file"
 	DEFB #FF
 sl1A:	DEFB cmHelpBox,"~F1~ Help",0,#3B
-	DEFB Txt,#B3," View information about"
-	DEFB " compilation"
+	DEFB Txt,#B3," Show console output of"
+	DEFB " the last Build or Run"
 	DEFB #FF
 sl1B:	DEFB cmHelpBox,"~F1~ Help",0,#3B
 	DEFB Txt,#B3," View symbol table"

@@ -109,14 +109,20 @@ exeLoader.Start:
 
 ;
 ; 2 - KodeMain (2 pages)
-	LD	HL,#C100	; !HARDCODE
+; Packed KodeMain is read into the top of SLOT3 (KodeMain2 page) and depacked
+; down to #8000. Load at #C000 (not #C100) to use the full 16384-byte page
+; window: packed size grew close to the limit and #C100 gave only #3F00=16128
+; bytes, overflowing past #FFFF (wrapping into SLOT0) once .hst passed 16128.
+; Forward-depack stays safe: min gap = (#C000+packed)-(#8000+unpacked) > 0.
+	ASSERT	HSTsize.KodeMain <= #4000			; packed must fit #C000..#FFFF
+	LD	HL,#C000	; !HARDCODE
 	LD	DE,HSTsize.KodeMain				; Internal operation
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
 	RST	ToDSS					; Block KodeMain
 	JP	C,No_Space				; CY - none memory
-	
-	LD	HL,#C100	; !HARDCODE; block
+
+	LD	HL,#C000	; !HARDCODE; block
 	LD	DE,#8000	; !HARDCODE mem map
 	CALL	DePACK					; Internal operation
 ;-[]

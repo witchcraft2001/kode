@@ -107,6 +107,7 @@ function dss() {
     case 0x0A: { const r = resolve(cstr(st.h << 8 | st.l)); clobber(st); if (!r.parent || !r.parent.dir) { st.a = 3; setF(st, true); return ret(); } const node = { dir: false, data: Buffer.alloc(0), size: 0, time: 0, date: 0x5821 }; r.parent.children[r.name] = node; const h = nextH++; files[h] = { node, pos: 0, buf: [] }; st.a = h; setF(st, false); return ret(); } // CREATE
     case 0x11: { const mode = st.a; const r = resolve(cstr(st.h << 8 | st.l)); clobber(st); if (!r.node || r.node.dir) { st.a = 3; setF(st, true); return ret(); } const h = nextH++; const f = { node: r.node, pos: 0, data: Buffer.from(r.node.data) }; if (mode !== 1) f.buf = Array.from(r.node.data); files[h] = f; st.a = h; setF(st, false); return ret(); } // OPEN (mode!=1 -> writable)
     case 0x12: { const f = files[st.a]; if (f && f.buf) { f.node.data = Buffer.from(f.buf); f.node.size = f.buf.length; } clobber(st); setF(st, false); return ret(); } // CLOSE
+    case 0x13: { const f = files[st.a]; if (!f) { st.a = 6; clobber(st); setF(st, true); return ret(); } const src = f.buf ? f.buf : f.data; const count = st.d << 8 | st.e; let addr = st.h << 8 | st.l, n = 0; while (n < count && f.pos < src.length) { wr(addr++, src[f.pos++]); n++; } clobber(st); st.d = (n >> 8) & 0xff; st.e = n & 0xff; st.a = n === count ? 0 : 0xFF; setF(st, false); return ret(); } // READ (DE=actual, HL/BC trashed)
     case 0x41: exitCode = st.b; cpu.setState(st); throw { halt: true };        // EXIT
     default: st.a = 1; setF(st, true); return ret();
   }

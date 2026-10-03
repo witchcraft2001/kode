@@ -261,9 +261,14 @@ exit:	CALL	CloseAll
 	LD	A,(BuffInd)
 	LD	C,#C3
 	RST	#08
+	LD	A,(BldLogBlk)		; free the console-log page if allocated
+	OR	A
+	JR	Z,$+5
+	LD	C,#C3
+	RST	#08
 	LD	A,#02
 	RST	#00
-	DI 
+	DI
 SaveStk:	LD	SP,#0000
 	IN	A,(SLOT1)
 	OUT	(SLOT3),A
@@ -576,16 +581,16 @@ CmndTable:
 	WORD	GoToLine
 
 	BYTE	#00			; Command run
-	WORD	.ret
+	WORD	BldRun
 
 	BYTE	#00			; Command parameters
-	WORD	.ret
+	WORD	BldParm
 
-	BYTE	#00			; Command compile
-	WORD	.ret
+	BYTE	#00			; Command compile (= Build)
+	WORD	BldBuild
 
-	BYTE	#00			; Command make
-	WORD	.ret
+	BYTE	#00			; Command make (= Target...)
+	WORD	BldTarg
 
 	BYTE	#00			; Command primary file
 	WORD	.ret
@@ -593,8 +598,8 @@ CmndTable:
 	BYTE	#00			; Command clear primary file
 	WORD	.ret
 
-	BYTE	#00			; Command information
-	WORD	.ret
+	BYTE	#00			; Command information (= Show console log)
+	WORD	BldShowC
 
 	BYTE	#00			; Command symbol list
 	WORD	.ret
@@ -949,6 +954,58 @@ SaveSetup:
 	CALL	SaveSetUp
 	POP	AF
 	OUT	(SLOT3),A
-	RET 
+	RET
+;[]===========================================================[]
+; Build/Run dispatch. The engine (BldEntry) lives in Dialog_Windows_PG2;
+; page it into SLOT3, call it, act on its verdict:
+;   0 - done   1 - SaveAll then re-enter (resume)   2 - full repaint.
+; SLOT3 is saved on the stack, not via SynPageDp2In (the engine's callees
+; may nest that pair).
+BldRun	LD	A,#00		; Run (Ctrl+F9)
+	JR	BldGo
+BldParm	LD	A,#01		; Parameters...
+	JR	BldGo
+BldBuild	LD	A,#02		; Build (F9)
+	JR	BldGo
+BldTarg	LD	A,#03		; Target...
+	JR	BldGo
+BldShowC	LD	A,#04		; Show console log
+BldGo	LD	B,A
+	IN	A,(SLOT3)
+	PUSH	AF
+	LD	A,(DialogPg2)
+	OUT	(SLOT3),A
+	LD	A,B
+	CALL	BldEntry
+	EX	AF,AF'
+	POP	AF
+	OUT	(SLOT3),A
+	EX	AF,AF'
+	DEC	A
+	JR	Z,BldSvAll	; 1 - save then resume
+	DEC	A
+	RET	NZ		; 0 - nothing to do
+	JP	RefrDisplay	; 2 - repaint
+BldSvAll	CALL	SaveAll
+	LD	A,#7F		; resume: redo action, skip prompt
+	JR	BldGo
+; Copy screen <-> console-log page for the PG2 engine. In: C=#B2 grab /
+; #B3 show. The #B2/#B3 routine repoints SLOT3 to the log page; being
+; resident we survive it, then restore SLOT3=DialogPg2 for the caller.
+BldScrCopy
+	LD	A,(BldLogPg)
+	OR	A
+	RET	Z
+	LD	B,A
+	LD	IX,WinBoxBuff+5100
+	LD	HL,#1E52
+	LD	DE,#0100
+	SUB	A
+	RST	#10
+	LD	A,(DialogPg2)
+	OUT	(SLOT3),A
+	RET
+BldLogPg	BYTE	#00		; console-log physical page (0 = none)
+BldLogBlk	BYTE	#00		; BIOS block id for the log page (freed at exit)
 ;
  _mCollectInfo_addEnd

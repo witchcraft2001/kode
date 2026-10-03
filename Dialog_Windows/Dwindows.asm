@@ -645,29 +645,62 @@ SurName	DEFS	36,0
 	DEFB	#FF
 TmpSurN	DEFB	"File  has been modify"
 ;[]===========================================================[]
-Dexists	DEFW	#0B15
-	DEFW	#0828
-	DEFB	"Information",0
+;[]===========================================================[]
+; Parameters... - session args for RUN.BAT. Backed by FuncBuffer.
+DbldParm	DEFW	#0C12
+	DEFW	#072C
+	DEFB	"Parameters",0
+
+	DEFB	Button
+	DEFW	#040C
+	DEFB	"   ~O~k   ",0,cmOkey,CTokD
+
+	DEFB	Button
+	DEFW	#0416
+	DEFB	" Cancel ",0,cmCancel,CTcancD
+
+	DEFB	InputLine
+	DEFW	#0204
+	DEFB	"~P~arameters:",0,#18,CTfindD
+	DEFW	FuncBuffer
+
+	DEFB	#FF
+;[]===========================================================[]
+; Target... - MAKEFILE target picker. List built in FuncBuffer.
+DbldTarg	DEFW	#0515
+	DEFW	#1525
+	DEFB	"Make target",0
+
+	DEFB	Button
+	DEFW	#0419
+	DEFB	"   ~O~k   ",0,cmOkey,CTokD
+
+	DEFB	Button
+	DEFW	#0C19
+	DEFB	" Cancel ",0,cmCancel,CTcancD
+
+	DEFB	ListBox
+	DEFW	#0203,#0F0F
+	DEFB	"~T~argets",0,CTwinlistD
+	DEFW	FuncBuffer
+
+	DEFB	#FF
+;[]===========================================================[]
+; Build/Run one-line message. BldMsgTxt is patched at runtime.
+DbldMsg	DEFW	#0C15
+	DEFW	#0726
+	DEFB	"Build",0
 
 	DEFB	TextLine
-	DEFW	#0207
-FLName	DEFS	28," "
+	DEFW	#0205
+BldMsgTxt	DEFS	29," "
 	DEFB	0
 
-	DEFB	TextLine
-	DEFW	#0310
-	DEFB	"Overwrite?",0
 	DEFB	Button
-	DEFW	#0510
-	DEFB	"   ~N~o   ",0,cmNo,CTokD
-	DEFB	Button
-	DEFW	#051B
-	DEFB	" Cancel ",0,cmCancel,CTcancD
-	DEFB	Button
-	DEFW	#0505
-	DEFB	"  ~Y~es   ",0,cmYes,CTokD
+	DEFW	#040F
+	DEFB	"   ~O~k   ",0,cmOkey,CTokD
+
 	DEFB	#FF
-TmpFLN	DEFB	"File  exists."
 ;[]===========================================================[]
 Dunform	DEFW	#0C0E
 	DEFW	#0734

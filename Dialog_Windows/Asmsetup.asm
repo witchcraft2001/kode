@@ -1144,7 +1144,10 @@ SynBKI5NoC:
 
 
 ;[]===========================================================[]
+	INCLUDE	"BuildRun.asm"
+;[]===========================================================[]
 SetupBuff:
 	DEFW	#FFFF
+	ASSERT	SetupBuff + #1102 <= #FFFF	; KODE.SET render reserve
 ;
  _mCollectInfo_addEnd

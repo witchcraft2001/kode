@@ -822,13 +822,22 @@ PInpN0	LD	(HL),A
 	LD	(DE),A		; Pos x
 	INC	DE
 	LD	(DE),A		; Add x
-	INC	DE
-	INC	DE
+	INC	DE		; -> current input length
+	LD	A,(DE)
+	LD	(IX+#05),A	; remaining initialized characters
+	INC	DE		; -> input text
 	PUSH	HL
 next1	LD	HL,#0000
 	LD	A,(ColInpLine)
 	LD	C,A
-PInpLp2	LD	A,(DE)
+PInpLp2	LD	A,(IX+#05)
+	OR	A
+	JR	Z,PInpSpc
+	DEC	(IX+#05)
+	LD	A,(DE)
+	JR	PInpPut
+PInpSpc	LD	A,#20
+PInpPut
 	INC	DE
 	LD	(HL),A
 	INC	HL

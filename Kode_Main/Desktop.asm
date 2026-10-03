@@ -99,7 +99,8 @@ WindGrp	DEFB	cmSave,cmSaveAs,cmSaveAll,cmPrint
 	DEFB	cmFind,cmReplace,cmTile
 	DEFB	cmCascade,cmCloseAll,cmGoToLine,cmClosTxtW
 	DEFB	cmNxtTxtWn,cmPrvTxtWn,cmMovReSiz,cmLocMenuM
-	DEFB	cmLocMenuK,cmOpenFile,cmZoom,cmSearchAg,#FF
+	DEFB	cmLocMenuK,cmOpenFile,cmZoom,cmSearchAg
+	DEFB	cmRun,cmParam,cmCompile,cmMake,#FF
 ;===============================================================
 ; Procedure close text window
 ClosTxW	CALL	OnlySyntax

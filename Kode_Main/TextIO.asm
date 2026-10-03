@@ -82,6 +82,7 @@ connmno	LDIR			; Copy
 	LD	H,L
 	LD	(ReadFlag),A	; Flag
 	LD	(CountWind),A	; Count-in open text.windows
+	LD	(ImportEOL),A	; Detect each file independently
 	INC	A
 	LD	(LstByte+1),A	; Byte
 	LD	(EquipLn),HL	; Count-in.lines
@@ -229,7 +230,10 @@ LstByte	LD	A,#00		; Byte
 	SCF
 	JP	ConvExt
 ConvCyc	LD	B,C
-ConvTA1	LD	A,(HL)		; 0
+ConvTA1	LD	A,HX
+	OR	LX
+	JR	Z,MoveCE1	; Flush unterminated last line
+	LD	A,(HL)		; 0
 	OR	A
 	JR	Z,MoveCE0
 	INC	HL
@@ -245,7 +249,8 @@ ConvTA1	LD	A,(HL)		; 0
 	LD	A,#20
 	JR	ConvTA3
 
-ConvTab	LD	A,E
+ConvTab	PUSH	BC		; Preserve input byte count
+	LD	A,E
 	LD	C,A
 	LD	A,(TABimpWidth)
 	DEC	A
@@ -261,9 +266,8 @@ ConvTabLp:	LD	A,E
 	LD	(DE),A
 	INC	E
 ConvTabSk:	DJNZ	ConvTabLp
-	LD	A,HX
-	OR	LX
-	JR	NZ,ConvTA1
+	POP	BC
+	DJNZ	ConvTA1
 	JR	MoveCE1
 ConvTA3
 	CALL	DosToScrChar
@@ -285,13 +289,27 @@ MoveCE0:	LD	A,(HL)
 	INC	HL
 	DEC	IX
 	JR	MoveCE1
-MoveCR	LD	A,(HL)		; Byte right after CR
+MoveCR	LD	A,HX
+	OR	LX
+	JR	Z,MoveCREOL	; No byte after final CR
+	LD	A,(HL)		; Byte right after CR
 	CP	#0A
-	JR	NZ,MovePref
+	JR	NZ,MoveCREOL
 	INC	HL		; Skip LF in CRLF
 	DEC	IX
+	LD	A,#01		; CRLF
+	JR	MoveSetEOL
+MoveCREOL:
+	LD	A,#02		; CR
+	JR	MoveSetEOL
 MoveLF:
-MovePref:	LD	A,(HL)
+	LD	A,#03		; LF
+MoveSetEOL:
+	CALL	DetectFileEOL
+MovePref:	LD	A,HX
+	OR	LX
+	JR	Z,MoveCE1
+	LD	A,(HL)
 	LD	(LstByte+1),A
 MoveCE1	LD	(RealBytes),IX	; Save..length
 	LD	(BegTXTstr),HL	; Next.text
@@ -306,6 +324,8 @@ textpg1	LD	A,#00		; 1 page text
 	OUT	(SLOT2),A
 textpg2	LD	A,#00		; 2 page text
 	OUT	(SLOT3),A
+	LD	A,(ImportEOL)
+	LD	(FileEOL),A	; Keep format in this text window
 	LD	HL,(BegTASstr)	; Next.TAS
 	LD	A,(CompBuff)	; Internal operation
 	LD	C,A
@@ -338,6 +358,19 @@ textpg2	LD	A,#00		; 2 page text
 	POP	AF
 	OUT	(SLOT2),A
 	OR	A
+	RET
+
+; First line ending selects the format for a mixed-EOL file.
+DetectFileEOL:
+	PUSH	AF
+	LD	A,(ImportEOL)
+	OR	A
+	JR	NZ,DetectEOLExt
+	POP	AF
+	LD	(ImportEOL),A
+	RET
+DetectEOLExt:
+	POP	AF
 	RET
 
 ; Pack zero-terminated ReCompBuff line into CompBuff record.
@@ -449,6 +482,8 @@ NxtTxtWind			; Next.TAS window
 	LD	(DE),A
 	LD	(BegTASstr),DE	; Next.TAS
 	LD	(EndText),DE
+	LD	A,(ImportEOL)
+	LD	(FileEOL),A	; Inherit format in next text window
 	LD	HL,(CurFPoint)
 	LD	DE,(BegTXTstr)
 	RES	7,D
@@ -644,6 +679,12 @@ PlExpColumn
 	DEFB	0
 PlExpTabFill
 	DEFB	0
+PlExpIndent
+	DEFB	0
+ImportEOL
+	DEFB	0
+ExportEOL
+	DEFB	#01
 ;[]===========================================================[]
 ; Procedure conversion TAS in file
 ;[]===========================================================[]
@@ -782,6 +823,14 @@ ProcessExportTXT
 	OUT	(SLOT2),A
 	LD	A,(IX+#1E)
 	OUT	(SLOT3),A
+	LD	A,(FileEOL)
+	DEC	A
+	CP	#03
+	INC	A
+	JR	C,ExpEOLOk
+	LD	A,#01		; New/legacy file defaults to CRLF
+ExpEOLOk:
+	LD	(ExportEOL),A
 	LD	HL,(BegTASstr)	; Copy current. TAS line
 	LD	DE,CompBuff	; In
 	LD	A,(HL)		; Internal operation
@@ -823,7 +872,7 @@ ConvWRT	CALL	WriteBlock	; Block
 	JR	ConvATe		; Exit
 
 ; Convert CompBuff record ([len][flags][payload][len]) into plain line in CompBuff.
-; Return BC = bytes to write (payload + CR).
+; Return BC = bytes to write (payload + detected line ending).
 PlainExportLine:
 	LD	IX,CompBuff
 	LD	A,(IX+#00)
@@ -838,6 +887,8 @@ PlExp0:
 	XOR	A
 	LD	(PlExpOutLen),A
 	LD	(PlExpColumn),A
+	INC	A
+	LD	(PlExpIndent),A
 	LD	A,(PlExpSrcLeft)
 	OR	A
 	JR	Z,PlExp1
@@ -846,7 +897,10 @@ PlExpCp:	LD	A,(PlExpSrcLeft)
 	JR	Z,PlExp1
 	LD	A,(HL)
 	CP	#20
-	JR	NZ,PlExpChr
+	JR	NZ,PlExpText
+	LD	A,(PlExpIndent)
+	OR	A
+	JR	Z,PlExpChr
 	LD	A,(OptimalTAB)
 	OR	A
 	JR	Z,PlExpChr
@@ -858,6 +912,10 @@ PlExpCp:	LD	A,(PlExpSrcLeft)
 	POP	DE
 	POP	BC
 	JR	C,PlExpTab
+	JR	PlExpChr
+PlExpText:
+	XOR	A
+	LD	(PlExpIndent),A	; Keep spaces in text/literals
 PlExpChr:	LD	A,(HL)
 	CALL	ScrToDosChar
 	LD	(DE),A
@@ -895,15 +953,23 @@ PlExpTab:	LD	A,#09
 PlExp1:
 	LD	HL,CompBuff
 	LD	A,(PlExpOutLen)
-	ADD	A,L
-	LD	L,A
-	JR	NC,$+3
-	INC	H
-	LD	(HL),#0D
-	LD	A,(PlExpOutLen)
-	INC	A
 	LD	C,A
 	LD	B,#00
+	ADD	HL,BC
+	LD	A,(ExportEOL)
+	CP	#03
+	LD	A,#0D
+	JR	NZ,PlExpEOL
+	LD	A,#0A
+PlExpEOL:
+	LD	(HL),A
+	INC	C
+	LD	A,(ExportEOL)
+	CP	#01
+	RET	NZ
+	INC	HL
+	LD	(HL),#0A
+	INC	C
 	RET
 
 PlExpTryTab:
@@ -915,6 +981,8 @@ PlExpTryTab:
 	LD	C,A
 	LD	A,(TABimpWidth)
 	SUB	C
+	CP	#02		; One space is not an optimization
+	JR	C,PlExpTShort
 	LD	(PlExpTabFill),A
 	LD	C,A
 	LD	A,(PlExpSrcLeft)
@@ -946,25 +1014,6 @@ DosToScrChar:
 ScrToDosChar:
 	RET
 
-DosToScrTbl:
-	DB #C0,#C1,#C2,#C3,#C4,#C5,#C6,#C7,#C8,#C9,#CA,#CB,#CC,#CD,#CE,#CF
-	DB #D0,#D1,#D2,#D3,#D4,#D5,#D6,#D7,#D8,#D9,#DA,#DB,#DC,#DD,#DE,#DF
-	DB #E0,#E1,#E2,#E3,#E4,#E5,#E6,#E7,#E8,#E9,#EA,#EB,#EC,#ED,#EE,#EF
-	DB #B0,#B1,#B2,#B3,#B4,#B5,#B6,#B7,#B8,#B9,#BA,#BB,#BC,#BD,#BE,#BF
-	DB #C0,#C1,#C2,#C3,#C4,#C5,#C6,#C7,#C8,#C9,#CA,#CB,#CC,#CD,#CE,#CF
-	DB #D0,#D1,#D2,#D3,#D4,#D5,#D6,#D7,#D8,#D9,#DA,#DB,#DC,#DD,#DE,#DF
-	DB #F0,#F1,#F2,#F3,#F4,#F5,#F6,#F7,#F8,#F9,#FA,#FB,#FC,#FD,#FE,#FF
-	DB #A8,#B8,#AA,#BA,#AF,#BF,#A1,#A2,#B0,#F9,#B7,#FB,#B9,#A4,#FE,#A0
-
-ScrToDosTbl:
-	DB #80,#81,#82,#83,#84,#85,#86,#87,#88,#89,#8A,#8B,#8C,#8D,#8E,#8F
-	DB #90,#91,#92,#93,#94,#95,#96,#97,#98,#99,#9A,#9B,#9C,#9D,#9E,#9F
-	DB #FF,#F6,#F7,#A3,#FD,#A5,#A6,#A7,#F0,#A9,#F2,#AB,#AC,#AD,#AE,#F4
-	DB #F8,#B1,#B2,#B3,#B4,#B5,#B6,#FA,#F1,#FC,#F3,#BB,#BC,#BD,#BE,#F5
-	DB #80,#81,#82,#83,#84,#85,#86,#87,#88,#89,#8A,#8B,#8C,#8D,#8E,#8F
-	DB #90,#91,#92,#93,#94,#95,#96,#97,#98,#99,#9A,#9B,#9C,#9D,#9E,#9F
-	DB #A0,#A1,#A2,#A3,#A4,#A5,#A6,#A7,#A8,#A9,#AA,#AB,#AC,#AD,#AE,#AF
-	DB #E0,#E1,#E2,#E3,#E4,#E5,#E6,#E7,#E8,#E9,#EA,#EB,#EC,#ED,#EE,#EF
 ;[]===========================================================[]
 ; Procedure write block text
 ; On:

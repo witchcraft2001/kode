@@ -20,6 +20,7 @@ Typos           EQU     IYpoint+#29
 Txpos           EQU     IYpoint+#2A
 Taddx           EQU     IYpoint+#2B
 EquipMr         EQU     IYpoint+#2C
+FileEOL         EQU     IYpoint+#2E	; 0-new,1-CRLF,2-CR,3-LF
 MarkCeil        EQU     IYpoint-#06
 
 Step            EQU     #08

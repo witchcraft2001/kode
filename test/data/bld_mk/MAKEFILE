@@ -1,0 +1,4 @@
+all: main.o
+	ld main.o
+run: all
+	./a.out

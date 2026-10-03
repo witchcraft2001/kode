@@ -288,10 +288,8 @@ MenuTab	DEFB	"~F~ile",0,033
 	DEFW	SrchWin
 	DEFB	"~R~un",0,019
 	DEFW	RunWin
-	DEFB	"~C~ompile",0,046
+	DEFB	"~B~uild",0,048
 	DEFW	CompWin
-	DEFB	"~D~ebug",0,032
-	DEFW	DebWin
 	DEFB	"~O~ptions",0,024
 	DEFW	OptnWin
 	DEFB	"~W~indows",0,017
@@ -650,14 +648,14 @@ SrchWin	DEFB	cmFind,"~F~ind...              F7",0,CTfind
 
 RunWin	DEFB	cmRun,"~R~un        Ctrl+F9",0,CTrun
 	DEFB	cmParam,"~P~arameters...",0,CTparam
-	DEFB	#FF
-
-CompWin	DEFB	cmInfo,"~I~nformation...",0,CTinfo
-	DEFB	#FF
-
-DebWin	DEFB	cmSymbList,"~S~ymbol list...",0,CTsymbList
 	DEFB	#FE
-	DEFB	cmQuitDeb,"~Q~uit to debugger",0,CTquitDeb
+	DEFB	cmQuitDeb,"~C~all debugger",0,CTquitDeb
+	DEFB	#FF
+
+CompWin	DEFB	cmCompile,"~B~uild          F9",0,CTcompile
+	DEFB	cmMake,"~T~arget...",0,CTmake
+	DEFB	#FE
+	DEFB	cmInfo,"Show console ~l~og",0,CTinfo
 	DEFB	#FF
 
 OptnWin	DEFB	cmEditor,"~E~ditor...",0,CTeditor

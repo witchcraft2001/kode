@@ -2082,6 +2082,23 @@ SynLFOk:
 	OR	A
 	RET
 
+; Resident (SLOT1) trampoline for DSS calls the PG2 Build/Run engine makes from
+; inside the DOS sandwich. DSS subdirectory file/dir traversal returns with SLOT3
+; repointed to the DSS DIRPAGE instead of DialogPg2 (root-level ops restore SLOT3,
+; subdir ops do NOT); a SLOT3-resident caller would then RET into garbage and warm-
+; reset. Doing the RST here in SLOT1 (always mapped, like SynLoadFileToBuf) and
+; restoring SLOT3 before returning makes subdir OPEN/EXEC safe. All registers pass
+; straight through. BldTrS3 = the SLOT3 page (DialogPg2), captured by BldDosIn
+; before the sandbox swaps SLOT0 (DialogPg2 at #08FE is unreadable once SLOT0=DOS).
+BldDssTramp:
+	RST	ToDSS			; perform the DSS call
+	PUSH	AF
+	LD	A,(BldTrS3)
+	OUT	(SLOT3),A		; restore SLOT3 for the SLOT3-resident caller
+	POP	AF
+	RET
+BldTrS3:	DEFB	0
+
 SynParseProfileBuf:
 	LD	HL,SynFileBuf
 SynPPLine:
