@@ -2099,6 +2099,84 @@ BldDssTramp:
 	RET
 BldTrS3:	DEFB	0
 
+; Console calls must also survive DOS in SLOT0 and BIOS repaging SLOT3.
+ConDss
+	DI
+	PUSH	IX
+	PUSH	IY
+	PUSH	AF
+	IN	A,(SLOT0)
+	LD	(ConSavS0),A
+	IN	A,(SLOT3)
+	LD	(ConSavS3),A
+	LD	A,(BldDosPg)
+	OUT	(SLOT0),A
+	POP	AF
+	RST	ToDSS
+	DI
+	PUSH	AF
+	LD	A,(ConSavS3)
+	OUT	(SLOT3),A
+	LD	A,(ConSavS0)
+	OUT	(SLOT0),A
+	POP	AF
+	POP	IY
+	POP	IX
+	RET
+ConCopy
+	DI
+	PUSH	IX
+	PUSH	IY
+	IN	A,(SLOT3)
+	PUSH	AF
+	IN	A,(SLOT2)
+	PUSH	AF
+	LD	A,(BldLogPg)
+	LD	B,A
+	OUT	(SLOT2),A		; copy page tail is a safe temporary stack
+	LD	(ConStack+1),SP
+	LD	SP,#BFFF
+	LD	IX,#C000
+	LD	HL,#2050		; BIOS copies physical columns, even in 40x32
+	LD	DE,#0000
+	XOR	A
+	RST	#08
+	DI
+ConStack	LD	SP,#0000
+	POP	AF
+	OUT	(SLOT2),A
+	POP	AF
+	OUT	(SLOT3),A
+	POP	IY
+	POP	IX
+	RET
+ConSavS0	DEFB	#00
+ConSavS3	DEFB	#00
+BldDosPg	DEFB	#00		; DOSpage remains readable inside DOS sandwich
+BldLogPg	DEFB	#00		; part of the loader's module allocation
+
+BldMouseUp
+	CALL	GetMousInfo
+	LD	A,(MSbutt)
+	AND	#03
+	JR	NZ,BldMouseUp
+	RET
+BldWaitPress	DEFB	#00
+
+; Restore the editor's video mode through the resident DSS wrapper.
+BldRestoreVM
+	LD	A,(BldSavVP)
+	LD	B,A
+	LD	A,(BldSavVM)
+	LD	C,Dss.SetVMod
+	JP	ConDss
+;[]===========================================================[]
+
+BldResetKey
+	XOR	A
+	LD	(ScanDown),A
+	RET
+
 SynParseProfileBuf:
 	LD	HL,SynFileBuf
 SynPPLine:

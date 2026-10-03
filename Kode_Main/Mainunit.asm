@@ -258,16 +258,13 @@ exit:	CALL	CloseAll
 	LD	HL,MarkGrp
 	CALL	CloseGroup
 	CALL	ResCurs
+	LD	A,#02
+	RST	#00
+	DI
+	CALL	BldConsoleExit		; after all editor screen changes
 	LD	A,(BuffInd)
 	LD	C,#C3
 	RST	#08
-	LD	A,(BldLogBlk)		; free the console-log page if allocated
-	OR	A
-	JR	Z,$+5
-	LD	C,#C3
-	RST	#08
-	LD	A,#02
-	RST	#00
 	DI
 SaveStk:	LD	SP,#0000
 	IN	A,(SLOT1)
@@ -598,7 +595,7 @@ CmndTable:
 	BYTE	#00			; Command clear primary file
 	WORD	.ret
 
-	BYTE	#00			; Command information (= Show console log)
+	BYTE	#01			; Show console log: initial snapshot is ready
 	WORD	BldShowC
 
 	BYTE	#00			; Command symbol list
@@ -989,23 +986,14 @@ BldGo	LD	B,A
 BldSvAll	CALL	SaveAll
 	LD	A,#7F		; resume: redo action, skip prompt
 	JR	BldGo
-; Copy screen <-> console-log page for the PG2 engine. In: C=#B2 grab /
-; #B3 show. The #B2/#B3 routine repoints SLOT3 to the log page; being
-; resident we survive it, then restore SLOT3=DialogPg2 for the caller.
-BldScrCopy
-	LD	A,(BldLogPg)
-	OR	A
-	RET	Z
-	LD	B,A
-	LD	IX,WinBoxBuff+5100
-	LD	HL,#1E52
-	LD	DE,#0100
-	SUB	A
-	RST	#10
+BldConsoleExit
+	IN	A,(SLOT3)
+	PUSH	AF
 	LD	A,(DialogPg2)
 	OUT	(SLOT3),A
+	CALL	ConsoleRestore
+	POP	AF
+	OUT	(SLOT3),A
 	RET
-BldLogPg	BYTE	#00		; console-log physical page (0 = none)
-BldLogBlk	BYTE	#00		; BIOS block id for the log page (freed at exit)
 ;
  _mCollectInfo_addEnd

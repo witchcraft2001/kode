@@ -122,6 +122,23 @@ ScnNxt1	CP	#F0
 	IN	A,(Z84.SIO.Ch_A.Data)
 ScnNxt2:
 	LD	L,A
+	LD	A,(ScanDown)
+	CP	L
+	JR	Z,ScnHeld
+	BIT	2,(IX+#02)
+	JR	NZ,ScnTracked
+	LD	A,L
+	LD	(ScanDown),A
+	LD	A,(ScanPress)
+	INC	A
+	LD	(ScanPress),A
+	JR	ScnTracked
+ScnHeld	BIT	2,(IX+#02)
+	JR	Z,ScnTracked
+	XOR	A
+	LD	(ScanDown),A
+ScnTracked	LD	A,L
+	LD	L,A
 	LD	H,#00
 	ADD	HL,HL
 	LD	DE,ScanTbl
@@ -266,6 +283,8 @@ GetBfN1:
 NumBuff:	DEFS	4,0
 
 PausBrk:
+	LD	HL,ScanPress
+	INC	(HL)		; Pause has its own make sequence
 	LD	A,(IX+#00)
 	XOR	#08
 	LD	(IX+#00),A
@@ -499,6 +518,8 @@ RusTbl1:
 BegBuff:	DEFW	KeyBuff
 EndBuff:	DEFW	KeyBuff
 
+ScanDown:	DEFB #00	; last held PS/2 key, repeats excluded
+ScanPress:	DEFB #00	; fresh make serial, including modifiers
 KeyFlag:	DEFB #00	; Press or not press
 ; D7-insert
 ; D6-caps lock

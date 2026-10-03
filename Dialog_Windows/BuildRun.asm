@@ -50,29 +50,27 @@ BldBR	LD	(BldBRmode),A
 	LD	A,#01
 	JR	BldRetV			; Yes -> save and resume
 BrGo	CALL	BldGetDir
-	CALL	ResCurs			; cursor off
-	LD	A,#02
-	RST	#00			; mouse off
-	CALL	GetBuff			; preserve Kode work area before console output
+	CALL	BldSaveEditor
 	CALL	BldDosIn
 	LD	A,(BldBRmode)
 	CALL	BldDecide
 	LD	(BldFound),A
 	OR	A
 	JR	NZ,BrNoExec
-BrExec	CALL	BldExecCon
+BrExec	CALL	ConsoleRestore
+	CALL	BldExecCon
 BrNoExec	CALL	BldDosOut
+	CALL	BldResetKey		; after Main is back in SLOT0, even on load failure
 	LD	A,(BldFound)		; grab console only if a child actually ran
 	OR	A
 	JR	NZ,BrReinit
 	LD	A,(BldErrF)
 	OR	A
 	JR	NZ,BrReinit
-	CALL	BldGrabLog		; snapshot console for "Show console log"
+	CALL	ConsoleGrab		; include output and non-zero exit message
 	LD	A,(BldErr)
 	OR	A
 	CALL	NZ,BldWaitKode		; pause only for a non-zero child exit code
-	CALL	BldRestoreVM		; restore Kode's video mode (console changed it)
 BrReinit
 	CALL	BldReInit
 	LD	A,(BldFound)
@@ -194,10 +192,7 @@ BtShow	LD	HL,DbldTarg
 	LD	HL,BldTgtName
 	CALL	BldStrCat
 	CALL	BldGetDir
-	CALL	ResCurs
-	LD	A,#02
-	RST	#00			; mouse off
-	CALL	GetBuff			; preserve Kode work area before console output
+	CALL	BldSaveEditor
 	CALL	BldDosIn
 	XOR	A
 	LD	(BldFound),A		; join the same post-EXEC path as Build/Run
@@ -205,15 +200,11 @@ BtShow	LD	HL,DbldTarg
 ;[]===========================================================[]
 ; Show console log - blit the saved console page, wait a key, repaint.
 BldDoShow
-	LD	A,(BldLogPg)
+	LD	A,(ConsoleReady)
 	OR	A
 	JP	Z,BldV0
-	CALL	ResCurs
-	LD	A,#02
-	RST	#00			; mouse off
-	CALL	GetBuff			; preserve Kode work area while showing the log
-	LD	C,#B3
-	CALL	BldScrCopy		; log page -> screen
+	CALL	BldSaveEditor
+	CALL	ConsoleRestore
 	CALL	BldWaitKode
 	CALL	BldReInit
 	JP	BldV0
@@ -398,16 +389,6 @@ BldExecCon
 	; directory traversal. Keep the command in resident SLOT1 for that interval.
 	LD	HL,BldCmdBuf
 	CALL	BldCopyStable
-	; Save Kode's video mode before the child/console switches it to a DOS text
-	; mode. Kode inherits VMODE at launch and never SETVMODs, so nothing else
-	; restores it; without this the editor redraws in the console's mode
-	; (duplicated lines / partial UI). Restored by BldRestoreVM after the wait.
-	LD	C,Dss.GetVMod
-	CALL	BldDssTramp		; A = mode, B = screen page
-	LD	(BldSavVM),A
-	LD	A,B
-	LD	(BldSavVP),A
-	CALL	BldClearCon		; do not leave Kode's TUI under child output
 	; VG93 is forced on (#7FFD=#10) for the file probes, but Dss.Exec repages
 	; SLOT3 via #E2 and #7FFD also selects the #C000 page, so a forced #10
 	; fights EXEC's paging -> the child loads mis-mapped and the machine
@@ -416,7 +397,6 @@ BldExecCon
 	LD	BC,#7FFD
 	XOR	A
 	OUT	(C),A
-	LD	HL,FuncBuffer
 	LD	B,#00
 	LD	C,Dss.Exec
 	LD	(BldSavSP),SP		; belt-and-braces around the DSS process switch
@@ -457,30 +437,17 @@ BecMsg	LD	HL,BldTxExit		; "Exit code "
 	; Kode's own RST #30 poll (BldWaitKode) after leaving the DOS sandwich.
 	RET
 ;[]===========================================================[]
-; Clear the full DSS 80x32 console and home its cursor before launching the
-; child. This is the same sequence as SYSTEM's CLS command.
-BldClearCon
-	LD	DE,#0000
-	LD	HL,#2050
-	LD	BC,#0700+Dss.Clear
-	LD	A,#20
-	CALL	BldDssTramp
-	LD	DE,#0000
-	LD	C,Dss.Locate
-	CALL	BldDssTramp
-	RET
-;[]===========================================================[]
-; Copy an ASCIIZ string from HL to resident FuncBuffer (#7900, SLOT1), then
-; return HL=FuncBuffer. DSS may repage SLOT3 while consuming the string.
+; Copy an ASCIIZ string from HL to resident ReCompBuff (#7B00, SLOT1), then
+; return HL=ReCompBuff. Keep FuncBuffer target lists intact across ChDir.
 BldCopyStable
-	LD	DE,FuncBuffer
+	LD	DE,ReCompBuff
 BcsLp	LD	A,(HL)
 	LD	(DE),A
 	INC	HL
 	INC	DE
 	OR	A
 	JR	NZ,BcsLp
-	LD	HL,FuncBuffer
+	LD	HL,ReCompBuff
 	RET
 ;[]===========================================================[]
 ; Build "Exec error NNN" into BldExMsg and show it.
@@ -558,69 +525,53 @@ BmDone	POP	AF
 	LD	HL,DbldMsg
 	JP	DialogW
 ;[]===========================================================[]
-; Ensure a 1-page console-log buffer exists. Sets BldLogPg / BldLogBlk
-; (resident). Silent no-op if allocation fails (BldLogPg stays 0).
-BldEnsureLog
-	LD	A,(BldLogPg)
-	OR	A
-	RET	NZ
-	LD	BC,#01C2		; BIOS.GetMem, 1 page
-	RST	#08
-	RET	C			; out of memory - stay disabled
-	LD	(BldLogBlk),A
-	LD	HL,BldLogPg
-	LD	C,#C5			; BIOS.GetMemBlkPages
-	RST	#08
-	RET
+	INCLUDE "Console.asm"
 ;[]===========================================================[]
-; Grab the console screen into the log page; enable "Show console log".
-BldGrabLog
-	CALL	BldEnsureLog
-	LD	A,(BldLogPg)
-	OR	A
-	RET	Z
-	LD	C,#B2
-	CALL	BldScrCopy		; resident (restores SLOT3)
-	LD	A,cmInfo
-	CALL	OpenCmnd
-	RET
+; Save the editor before either EXEC or Show log changes the video mode.
+BldSaveEditor
+	CALL	ResCurs
+	LD	A,(MSbutt)		; retain the opening button until its release
+	PUSH	AF
+	LD	A,#02
+	RST	#00
+	POP	AF
+	LD	(MSbutt),A
+	LD	C,Dss.GetVMod
+	CALL	ConDss
+	LD	(BldSavVM),A
+	LD	A,B
+	LD	(BldSavVP),A
+	JP	GetBuff
 ;[]===========================================================[]
-; Wait for any key using KODE's own scancode driver (RST #30), not Dss.WaitKey.
-; Must run with SLOT0 = KodeMain (RST #30 dispatches through #0030 there), i.e.
-; only AFTER leaving the DOS sandwich. Kode polls the keyboard with interrupts
-; off, so DI first (also stops the DSS trampoline ISR from eating scancodes).
+; Poll explicitly with IRQs off: mouse packets and fresh PS/2 make events.
+; Drain the opening event, ignore autorepeat, and consume the closing release.
 BldWaitKode
 	DI
-	XOR	A
-	RST	#30			; init scancode driver
+	CALL	ScanDrv
 	LD	A,#01
-	RST	#30			; clear key buffer (drop stale/held keys)
-BwkLp	LD	A,#02
-	RST	#30			; poll; Z = no key yet
+	RST	#30
+	CALL	BldMouseUp
+	LD	A,(ScanPress)
+	LD	(BldWaitPress),A
+BwkLp	CALL	ScanDrv
+	CALL	GetMousInfo
+	LD	A,(MSbutt)
+	AND	#03
+	JR	NZ,BwkDone
+	LD	A,(BldWaitPress)
+	LD	HL,ScanPress
+	CP	(HL)
 	JR	Z,BwkLp
-	RET
-;[]===========================================================[]
-; Restore Kode's video mode (saved by BldExecCon's GETVMOD) after the child.
-; SETVMOD is a DSS call, so it needs SLOT0 = DOSpage - a minimal sandwich.
-BldRestoreVM
-	IN	A,(SLOT0)
-	LD	(BldSavS0),A
-	LD	A,(DOSpage)
-	OUT	(SLOT0),A
-	LD	A,(BldSavVP)
-	LD	B,A
-	LD	A,(BldSavVM)
-	LD	C,Dss.SetVMod
-	CALL	BldDssTramp
-	LD	A,(BldSavS0)
-	OUT	(SLOT0),A
-	RET
+BwkDone	CALL	ScanDrv
+	LD	A,(ScanDown)
+	OR	A
+	JR	NZ,BwkDone
+	CALL	BldMouseUp
+	JP	InitEvent
 ;[]===========================================================[]
 ; Re-init video / mouse / scancode after a child (mirror the KodeStart tail).
 BldReInit
-	DI				; the child ran with interrupts on; Kode's main
-					; loop runs with them off - restore that here so
-					; the DSS trampoline ISR stops firing.
+	CALL	BldRestoreVM		; resident wrapper returns with IRQs off
 	LD	A,#01
 	OUT	(RGMOD),A
 	LD	A,#C0

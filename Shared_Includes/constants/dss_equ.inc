@@ -16,6 +16,7 @@ Dss.WaitKey      EQU #30
 
 Dss.SetVMod      EQU #50
 Dss.GetVMod      EQU #51
+Dss.Cursor       EQU #53
 Dss.Locate       EQU #52
 Dss.Clear        EQU #56
 

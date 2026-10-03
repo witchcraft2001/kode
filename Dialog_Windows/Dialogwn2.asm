@@ -222,7 +222,7 @@ PLstBoxI:
 	SUB	E
 	LD	C,A
 	CALL	SetDialInv
-	LD	A,(IX+#0F)
+	LD	A,(IX+#10)
 	CALL	PutStatusLn
 	CALL	StLstBoxI
 	RET 

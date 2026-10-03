@@ -80,12 +80,14 @@ exeLoader.Start:
 	LD	BC,+(ModulesPages.Size)*256+BIOS.GetMem
 	RST	ToBIOS					; Must ModulesPages.Size pages memory
 
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderNoMem			; leave console untouched
 	LD	(FIndef),A				; Pages
 	LD	HL,ModulesPages
 	LD	C,BIOS.GetMemBlkPages
 	RST	ToBIOS					; Pages
 
+
+	CALL	InitialConsole.ConsoleGrab	; before Prepare changes the console
 
 	LD	A,(ModulesPages.KodeMain1)			; Enable.with #4000
 	OUT	(SLOT2),A
@@ -99,7 +101,7 @@ exeLoader.Start:
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
 	RST	ToDSS					; Prepare ()
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderAbort				; CY - none memory
 
 	LD	HL,#4000	; !HARDCODE; block
 	LD	DE,#9000	; !HARDCODE
@@ -120,7 +122,7 @@ exeLoader.Start:
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
 	RST	ToDSS					; Block KodeMain
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderAbort				; CY - none memory
 
 	LD	HL,#C000	; !HARDCODE; block
 	LD	DE,#8000	; !HARDCODE mem map
@@ -138,12 +140,16 @@ exeLoader.Start:
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
 	RST	ToDSS
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderAbort				; CY - none memory
 
 	LD	HL,#4000	; !HARDCODE; block
 	LD	DE,#8000	; !HARDCODE mem map
 	CALL	DePACK
 ;-[]
+	LD	HL,InitialConsole.ConsoleState
+	LD	DE,ConsoleState
+	LD	BC,ConsoleStateEnd-ConsoleState
+	LDIR				; console metadata -> dialog page
 
 	LD	A,(ModulesPages.Menubar1)
 	OUT	(SLOT2),A
@@ -156,7 +162,7 @@ exeLoader.Start:
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
 	RST	ToDSS
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderAbort				; CY - none memory
 
 	LD	HL,#4000	; !HARDCODE; block
 	LD	DE,#8000	; !HARDCODE mem map
@@ -172,7 +178,7 @@ exeLoader.Start:
 	LD	A,(Fhandle)
 	LD	C,Dss.Read
 	RST	ToDSS
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderAbort				; CY - none memory
 
 	LD	HL,#4000	; !HARDCODE; block
 	LD	DE,#8000	; !HARDCODE mem map
@@ -273,7 +279,7 @@ LaunchPathGot:
 
 	POP	DE
 	POP	HL
-	JP	C,No_Space				; CY - none memory
+	JP	C,LoaderAbort				; CY - none memory
 	ADD	HL,DE
 	LD	(HL),#FF
 	INC	HL
@@ -284,6 +290,11 @@ LaunchPathGot:
 
 NoSetup:	LD	HL,TempDirBuf		; Back to the dir Kode was launched from
 	CALL	RestoreDir
+	LD	A,(InitialConsole.ConsolePage)
+	LD	B,A
+	LD	A,#03			; editor always uses 80x32
+	LD	C,Dss.SetVMod
+	CALL	InitialConsole.ConDss
 	IN	A,(SLOT0)
 	PUSH	AF
 
@@ -319,6 +330,9 @@ NoSetup:	LD	HL,TempDirBuf		; Back to the dir Kode was launched from
 	OUT	(SLOT3),A
 	POP	AF
 	LD	(DOSpage),A
+	LD	(BldDosPg+#8000),A
+	LD	A,(ModulesPages.Console)
+	LD	(BldLogPg+#8000),A
 
 	LD	A,(ModulesPages.Dialogwn1)
 	LD	(DialogPg1),A
@@ -339,14 +353,14 @@ NoSetup:	LD	HL,TempDirBuf		; Back to the dir Kode was launched from
 ;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-	LD	HL,FILLend_KodeMain
-	LD	DE,FILLend_KodeMain+1
-	LD	BC,#FFFF-FILLend_KodeMain
+	LD	HL,FILLend_KodeMain+#8000	; Main2 is still mapped at #C000
+	LD	DE,FILLend_KodeMain+#8000+1
+	LD	BC,#7FFF-FILLend_KodeMain
 	LD	(HL),A
-	LDIR 						; !FIXIT
+	LDIR 						; clear Main2 buffers, not the loader
 	
 	LD	HL,MoveP
-	LD	DE,#F700					; !hardcode mem map
+	LD	DE,#F704					; above the Main2 code and return stack
 	LD	BC,MoveE-MoveP
 	PUSH	DE
 	LDIR 
@@ -384,14 +398,75 @@ ModulesPages:
 .Menubar1:	BYTE	#00
 .Menubar2:	BYTE	#00
 .Command:		BYTE	#00
+.Console:	BYTE	#00
 .Size		EQU	$-ModulesPages
 .CloseByte	BYTE	#00 ; Byte- from pages memory
 ;
 
 ;
+LoaderAbort
+	CALL	InitialConsole.ConsoleRestore
+	LD	A,(FIndef)
+	LD	C,BIOS.FreeMem
+	RST	ToBIOS
+LoaderNoMem
+	LD	HL,(SAVE_HL)
+	LD	(#0038),HL
+	LD	B,#00
+	LD	C,Dss.Exit
+	RST	ToDSS
+;
+ MODULE InitialConsole
+	INCLUDE 'Dialog_Windows/Console.asm'
+ConDss
+	DI
+	PUSH	IX
+	PUSH	IY
+	PUSH	AF
+	IN	A,(SLOT3)
+	LD	(ConSavS3),A
+	POP	AF
+	RST	ToDSS
+	DI
+	PUSH	AF
+	LD	A,(ConSavS3)
+	OUT	(SLOT3),A
+	POP	AF
+	POP	IY
+	POP	IX
+	RET
+ConCopy
+	PUSH	IX
+	PUSH	IY
+	IN	A,(SLOT3)
+	PUSH	AF
+	IN	A,(SLOT2)
+	PUSH	AF
+	LD	A,(ModulesPages.Console)
+	LD	B,A
+	OUT	(SLOT2),A		; copy page tail is a safe temporary stack
+	LD	(ConStack+1),SP
+	LD	SP,#BFFF
+	LD	IX,#C000
+	LD	HL,#2050		; 80 physical columns in both text modes
+	LD	DE,#0000
+	XOR	A
+	RST	ToBIOS
+	DI
+ConStack	LD	SP,#0000
+	POP	AF
+	OUT	(SLOT2),A
+	POP	AF
+	OUT	(SLOT3),A
+	POP	IY
+	POP	IX
+	RET
+ConSavS3	BYTE	#00
+ ENDMODULE
+;
 ; ---------[ self relocating code ]---------;
 MoveP:	DI 
-	LD	SP,#F6FF					; !hardcode mem map
+	LD	SP,#F704					; return word at #F702, outside Main2
 	IN	A,(SLOT3)
 	OUT	(SLOT1),A
 	CALL	KodeStart
@@ -416,18 +491,6 @@ MoveP:	DI
 	CALL	#3D14					; !fixit #3d14
 ;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 */
-
-	SUB	A
-	OUT	(BorderColor),A
-	INC	A
-	OUT	(RGMOD),A
-
-
-; >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-	LD	BC,#1FFD					; !fixit #1ffd
-	OUT	(C),A
-;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
 
 FIndef+1:	LD	A,#00
 	LD	C,BIOS.FreeMem
