@@ -1,7 +1,6 @@
  _mCollectInfo_addStart
 
-; Stable lightweight syntax highlighter.
-; No file I/O, no dynamic profile loading.
+; Syntax profiles, viewport rendering and block-comment state.
 
 SyntaxExtTry:
 	LD	A,(IY+#02)
@@ -15,36 +14,54 @@ SyntaxExtTry:
 	JP	SyntaxExtTryBuf
 
 ; Syntax-highlight an arbitrary decompiled line buffer.
-; In: HL = buffer (char,attr,char,attr,...), IX = packed line header
+; In: HL = buffer (char,attr,...), IX = packed header; TextBuff uses IY len.
 ;     (IX+0 = text_len+3, IX+1 = attr byte, bit 6 = selected)
 SyntaxExtLine:
+	PUSH	IX
 	LD	(SynWorkBuf),HL
+	LD	A,H
+	CP	high TextBuff
+	JR	NZ,SynExPacked
+	LD	A,L
+	OR	A
+	JR	NZ,SynExPacked
+	LD	A,(IY+#02)		; current line may have unsaved length changes
+	JR	SynExLnSize
+SynExPacked:
 	LD	A,(IX+#00)
 	CP	#03
 	JR	NC,SynExLn0
 	LD	A,#03
 SynExLn0:
 	SUB	#03
+SynExLnSize:
 	LD	(SynLineLen),A
 	LD	A,(IX+#01)
 	LD	(SynLineAttr),A
-	JP	SyntaxExtTryBuf
+	CALL	SyntaxExtTryBuf
+	POP	IX
+	RET
 
 SyntaxExtTryBuf:
+	CALL	SynSetupLineColors
+	LD	A,(SynHghLght)
+	OR	A
+	RET	Z
 	LD	A,(SynRenderPass)
 	OR	A
 	JR	NZ,SynExtRender
-	CALL	SynSetupLineColors
 	CALL	SynDetectLang
 	LD	(SynLang),A
 	OR	A
 	RET	Z
 	CALL	SynEnsureProfileLoaded
+	LD	A,(SynProfileReady)
+	OR	A
+	RET	Z
 	CALL	SynSeedBlockAtCursor
 	JR	SynExtRun
 
 SynExtRender:
-	CALL	SynSetupLineColors
 	LD	A,(SynRenderLangValid)
 	OR	A
 	JR	Z,SynExtRDet
@@ -65,13 +82,19 @@ SynExtRDet:
 	OR	A
 	RET	Z
 	CALL	SynEnsureProfileLoaded
+	LD	A,(SynProfileReady)
+	LD	(SynRenderLang),A
+	OR	A
+	RET	Z
 	LD	A,#01
 	LD	(SynRenderLangValid),A
 	CALL	SynCacheBlockIX
 	JR	SynExtRun
 SynExtRun:
 	CALL	SynHighlightComments
-	CALL	SynHighlightStrings
+	LD	A,(SynLineAttr)
+	AND	#40
+	RET	NZ
 	CALL	SynHighlightNumbers
 	CALL	SynHighlightKeywords
 	CALL	SynHighlightBrackets
@@ -80,12 +103,19 @@ SynExtRun:
 ; Detect and load the syntax profile once before a multi-line render pass,
 ; then seed block-comment state with the new profile already active.
 SynPrepareRender:
+	LD	A,(SynHghLght)
+	OR	A
+	JR	Z,SynPRLang
 	CALL	SynDetectLang
+SynPRLang:
 	LD	(SynLang),A
 	LD	(SynRenderLang),A
 	OR	A
 	JR	Z,SynPRReady
 	CALL	SynEnsureProfileLoaded
+	LD	A,(SynProfileReady)
+	OR	A
+	JR	Z,SynPRLang
 	CALL	SynSeedBlockFromTop
 SynPRReady:
 	LD	A,#01
@@ -139,7 +169,7 @@ SynSLC1:
 SynDetectLang:
 	XOR	A
 	LD	(SynProfileName),A		; clear any previous profile name
-	CALL	SynGetCurrName
+	CALL	SynGetTextName
 	LD	HL,SynNameBuf
 	LD	DE,#0000
 SynDLp:
@@ -399,173 +429,197 @@ SynECL_End:
 	OR	A
 	RET
 
-; Scan for SynLineCom1 / SynLineCom2 patterns in the current line and paint.
-; SynHasBlockCom=1 selects C /*..*/ comments; #02 selects Pascal comments.
+; One lexical pass for comments and strings, including closed blocks.
 SynHighlightComments:
-	LD	A,(SynLang)
+	LD	A,(SynLineLen)
+	OR	A
+	RET	Z
+	LD	B,A
+	LD	HL,(SynWorkBuf)
+SynLexNext:
+	LD	A,B
+	OR	A
+	RET	Z
+	LD	A,(SynCBlockOpen)
+	OR	A
+	JR	Z,SynLexOutside
+	LD	C,A
+	JR	SynLexBlock
+SynLexOutside:
+	LD	A,(HL)
+	LD	C,A
+	CALL	SynIsStringDelim
+	JR	NZ,SynLexComment
+	CALL	SynPaintString
+	JR	SynLexNext
+SynLexComment:
+	LD	DE,SynLineCom1
+	CALL	SynMatchComment
+	JP	Z,SynPaintToEnd
+	LD	A,(SynHasBlockCom)
+	CP	#02
+	JR	NZ,SynLexSecond
+	LD	DE,SynPasOpen
+	CALL	SynMatchComment
+	LD	C,#02
+	JR	Z,SynLexOpen
+SynLexSecond:
+	LD	DE,SynLineCom2
+	CALL	SynMatchComment
+	JR	NZ,SynLexStep
+	LD	A,(SynHasBlockCom)
+	OR	A
+	JP	Z,SynPaintToEnd
+	LD	C,#01
+SynLexOpen:
+	LD	A,C
+	LD	(SynCBlockOpen),A
+	; Consume the opener before testing for a closer: /*/ stays open.
+	CALL	SynPaintComChar
+	LD	A,(SynHasBlockCom)
+	CP	#02
+	JR	NZ,SynLexOpenPair
+	LD	A,C
+	CP	#01
+	JR	Z,SynLexBlock
+SynLexOpenPair:
+	LD	A,B
+	OR	A
+	RET	Z
+	CALL	SynPaintComChar
+SynLexBlock:
+	CALL	SynPaintPasBlock
+	RET	NC
+	XOR	A
+	LD	(SynCBlockOpen),A
+	JR	SynLexNext
+SynLexStep:
+	INC	HL
+	INC	HL
+	DEC	B
+	JR	SynLexNext
+SynPasOpen:	DEFB	'(*',0
+
+; In: C = character. Out: Z if it is a configured string delimiter.
+SynIsStringDelim:
+	PUSH	HL
+	LD	HL,SynStringDelims
+SynISDLp:
+	LD	A,(HL)
+	OR	A
+	JR	Z,SynISDNo
+	CP	C
+	JR	Z,SynISDEnd
+	INC	HL
+	JR	SynISDLp
+SynISDNo:
+	OR	#01
+SynISDEnd:
+	POP	HL
+	RET
+
+; Match a nonempty comment pattern at DE against HL, bounded by B.
+SynMatchComment:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynMCNo
+	CALL	SynToLower
+	LD	C,A
+	LD	A,(HL)
+	CALL	SynToLower
+	CP	C
+	RET	NZ			; reject by first character without a stack frame
+	PUSH	HL
+	PUSH	BC
+	PUSH	DE
+	LD	C,B
+	INC	HL
+	INC	HL
+	INC	DE
+	DEC	C
+SynMCLp:
+	LD	A,(DE)
+	OR	A
+	JR	Z,SynMCEnd
+	LD	A,C
+	OR	A
+	JR	Z,SynMCMiss
+	LD	A,(DE)
+	CALL	SynToLower
+	LD	B,A
+	LD	A,(HL)
+	CALL	SynToLower
+	CP	B
+	JR	NZ,SynMCMiss
+	INC	HL
+	INC	HL
+	INC	DE
+	DEC	C
+	JR	SynMCLp
+SynMCMiss:
+	OR	#01
+SynMCEnd:
+	POP	DE
+	POP	BC
+	POP	HL
+	RET
+SynMCNo:
+	OR	#01
+	RET
+
+SynPaintComChar:
+	LD	A,(TmpColC)
+	INC	HL
+	LD	(HL),A
+	INC	HL
+	DEC	B
+	RET
+
+; C = block type: Pascal {}=1, (* *)=2; C /* */=1.
+; CF=1 if closed, HL/B point to the first character after the block.
+SynPaintPasBlock:
+	LD	A,B
 	OR	A
 	RET	Z
 	LD	A,(SynHasBlockCom)
-	OR	A
-	JR	Z,SynHCLine
 	CP	#02
-	JP	Z,SynComPas
-	JR	SynComC
-SynHCLine:
-	LD	HL,SynLineCom1
-	CALL	SynPaintFromStr
-	LD	HL,SynLineCom2
-	CALL	SynPaintFromStr
-	RET
-
-SynComC:
-	LD	A,(SynCBlockOpen)
-	OR	A
-	JR	Z,SynComCScan
-	LD	HL,(SynWorkBuf)
-	LD	A,(SynLineLen)
-	LD	B,A
-	CALL	SynPaintToEnd
-	CALL	SynFindBlockClose
-	RET	C
-	XOR	A
-	LD	(SynCBlockOpen),A
-	RET
-SynComCScan:
-	LD	A,(SynLineLen)
-	LD	B,A
-	LD	HL,(SynWorkBuf)
-SynCCLp:
-	LD	A,B
-	OR	A
-	RET	Z
-	LD	A,(HL)
-	CP	'/'
-	JR	NZ,SynCCNext
-	INC	HL
-	INC	HL
-	DEC	B
-	LD	A,B
-	OR	A
-	RET	Z
-	LD	A,(HL)
-	CP	'/'
-	JR	Z,SynCCMark
-	CP	'*'
-	JR	Z,SynCCBlock
-	DEC	HL
-	DEC	HL
-	INC	B
-	JR	SynCCNext
-SynCCBlock:
-	DEC	HL
-	DEC	HL
-	INC	B
-	CALL	SynPaintToEnd
-	CALL	SynFindBlockClose
-	RET	NC
-	LD	A,#01
-	LD	(SynCBlockOpen),A
-	RET
-SynCCMark:
-	DEC	HL
-	DEC	HL
-	INC	B
-	CALL	SynPaintToEnd
-	RET
-SynCCNext:
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	SynCCLp
-
-; Pascal block comments: {...} and (*...*).
-SynComPas:
-	LD	HL,(SynWorkBuf)
-	LD	A,(SynLineLen)
-	LD	B,A
-	LD	A,(SynCBlockOpen)
-	OR	A
-	JR	Z,SynCPScan
-	LD	C,A
-	CALL	SynPaintPasBlock
-	RET	NC
-	XOR	A
-	LD	(SynCBlockOpen),A
-SynCPScan:
-	LD	A,B
-	OR	A
-	RET	Z
-	LD	A,(HL)
-	CP	'{'
-	JR	Z,SynCPBrace
-	CP	'('
-	JR	NZ,SynCPNext
-	LD	A,B
-	CP	#02
-	JR	C,SynCPNext
-	INC	HL
-	INC	HL
-	LD	A,(HL)
-	CP	'*'
-	DEC	HL
-	DEC	HL
-	JR	NZ,SynCPNext
-	LD	C,#02
-	JR	SynCPOpen
-SynCPBrace:
-	LD	C,#01
-SynCPOpen:
-	CALL	SynPaintPasBlock
-	JR	C,SynCPScan
-	LD	A,C
-	LD	(SynCBlockOpen),A
-	RET
-SynCPNext:
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	SynCPScan
-
-; In: HL = first comment character, B = remaining chars, C = #01 for {}
-; or #02 for (* *). Out: CF set if the close delimiter was found.
-SynPaintPasBlock:
-	LD	A,(TmpColC)
-	LD	D,A
-SynPPBLp:
-	LD	A,B
-	OR	A
-	RET	Z
-	LD	A,(HL)
-	LD	E,A
-	INC	HL
-	LD	(HL),D
-	INC	HL
-	DEC	B
+	JR	NZ,SynPPBPair
 	LD	A,C
 	CP	#01
-	JR	NZ,SynPPBStar
-	LD	A,E
-	CP	'}'
-	JR	NZ,SynPPBLp
-	SCF
-	RET
-SynPPBStar:
-	LD	A,E
-	CP	'*'
-	JR	NZ,SynPPBLp
-	LD	A,B
-	OR	A
-	JR	Z,SynPPBLp
+	JR	NZ,SynPPBPair
 	LD	A,(HL)
+	CP	'}'
+	JR	Z,SynPPBClose
+	JR	SynPPBStep
+SynPPBPair:
+	LD	A,(HL)
+	CP	'*'
+	JR	NZ,SynPPBStep
+	LD	A,B
+	CP	#02
+	JR	C,SynPPBStep
+	PUSH	HL
+	INC	HL
+	INC	HL
+	LD	A,(SynHasBlockCom)
+	CP	#02
+	LD	A,(HL)
+	POP	HL
+	JR	Z,SynPPBPas
+	CP	'/'
+	JR	SynPPBCheck
+SynPPBPas:
 	CP	')'
-	JR	NZ,SynPPBLp
-	INC	HL
-	LD	(HL),D
-	INC	HL
-	DEC	B
+SynPPBCheck:
+	JR	NZ,SynPPBStep
+	CALL	SynPaintComChar
+SynPPBClose:
+	CALL	SynPaintComChar
 	SCF
 	RET
+SynPPBStep:
+	CALL	SynPaintComChar
+	JR	SynPaintPasBlock
 
 SynPaintToEnd:
 	LD	A,(TmpColC)
@@ -574,65 +628,39 @@ SynPTE0:
 	LD	(HL),A
 	INC	HL
 	INC	HL
-	DEC	B
-	JR	NZ,SynPTE0
+	DJNZ	SynPTE0
 	RET
 
-; Scan SynWorkBuf for the first occurrence of the null-terminated pattern at
-; HL (1-3 chars typically). If found, paint TmpColC from the match position to
-; end of line via SynPaintToEnd. Case-insensitive. No-op on empty pattern.
-SynPaintFromStr:
-	LD	A,(HL)
-	OR	A
-	RET	Z
-	PUSH	IX
-	PUSH	HL
-	POP	IX
-	LD	A,(SynLineLen)
-	LD	B,A
-	OR	A
-	JR	Z,SynPFS_Exit
-	LD	HL,(SynWorkBuf)
-SynPFS_ScanLp:
-	PUSH	HL
-	PUSH	BC
-	LD	C,B
-	PUSH	IX
-	POP	DE
-SynPFS_MLp:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynPFS_Hit
-	LD	A,C
-	OR	A
-	JR	Z,SynPFS_Miss
-	LD	A,(DE)
-	CALL	SynToLower
-	LD	B,A
-	LD	A,(HL)
-	CALL	SynToLower
-	CP	B
-	JR	NZ,SynPFS_Miss
+; Consume and paint one string, protecting escaped delimiters.
+SynPaintString:
+	LD	A,(TmpColS)
+	LD	D,A
+SynPSFirst:
 	INC	HL
-	INC	HL
-	INC	DE
-	DEC	C
-	JR	SynPFS_MLp
-SynPFS_Miss:
-	POP	BC
-	POP	HL
-	INC	HL
+	LD	(HL),D
 	INC	HL
 	DEC	B
-	JR	NZ,SynPFS_ScanLp
-SynPFS_Exit:
-	POP	IX
-	RET
-SynPFS_Hit:
-	POP	BC
-	POP	HL
-	CALL	SynPaintToEnd
-	POP	IX
+	RET	Z
+SynPSInside:
+	LD	A,(HL)
+	CP	C
+	JR	Z,SynPSClose
+	CP	#5C
+	JR	NZ,SynPSFirst
+	LD	A,(SynHasBlockCom)
+	CP	#02			; Pascal backslashes are literal
+	JR	Z,SynPSFirst
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	DEC	B
+	RET	Z
+	JR	SynPSFirst		; escaped character cannot close the string
+SynPSClose:
+	INC	HL
+	LD	(HL),D
+	INC	HL
+	DEC	B
 	RET
 
 SynHighlightKeywords:
@@ -671,6 +699,10 @@ SynKWCollect:
 	POP	HL
 	POP	BC
 	JR	C,SynKWNext
+	PUSH	BC			; lookup and painting clobber BC
+	LD	A,(SynTokenLen)
+	CP	#18
+	JR	NC,SynKWSkipWord
 	LD	A,(SynKeywords1)
 	OR	A
 	JR	Z,SynKWSecond
@@ -696,6 +728,7 @@ SynKWPaint:
 	CALL	SynColorWord
 	POP	HL
 SynKWSkipWord:
+	POP	BC
 	LD	A,(SynTokenLen)
 	LD	E,A
 	LD	D,#00
@@ -798,101 +831,6 @@ SynWIxYes:
 SynWIxNo:
 	LD	A,#01
 	OR	A
-	RET
-
-; Paint string literals delimited by characters listed in SynStringDelims
-; (e.g. " or '). Only the OPENING delimiter is required to be at base
-; color (so we never start a string inside a comment); inside the string
-; we paint unconditionally, so the string can span chars that other passes
-; might have touched.
-SynHighlightStrings:
-	LD	A,(SynStringDelims)
-	OR	A
-	RET	Z				; no delims configured for this profile
-	LD	A,(SynLineLen)
-	OR	A
-	RET	Z
-	LD	B,A				; B = remaining char-pairs to scan
-	LD	HL,(SynWorkBuf)
-SynHSScanCh:
-	INC	HL
-	LD	A,(HL)
-	DEC	HL
-	LD	C,A				; C = current attribute
-	LD	A,(SynBaseColor)
-	CP	C
-	JR	NZ,SynHSSkipCh			; not at base — skip this char
-	LD	A,(HL)				; current char
-	LD	C,A
-	PUSH	HL
-	LD	HL,SynStringDelims
-SynHSDelimLp:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynHSNoDelim
-	CP	C
-	JR	Z,SynHSStart
-	INC	HL
-	JR	SynHSDelimLp
-SynHSNoDelim:
-	POP	HL
-	JR	SynHSSkipCh
-SynHSStart:
-	POP	HL				; HL → opening delim char
-	; C = the matched delim character (used as closing delim)
-	INC	HL
-	LD	A,(TmpColS)
-	LD	(HL),A
-	DEC	HL
-	INC	HL
-	INC	HL
-	DEC	B
-	RET	Z
-SynHSInside:
-	LD	A,(HL)
-	CP	#5C
-	JR	Z,SynHSEscape
-	CP	C
-	JR	Z,SynHSClose
-	INC	HL
-	LD	A,(TmpColS)
-	LD	(HL),A
-	DEC	HL
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	NZ,SynHSInside
-	RET					; ran off line without close — leave as is
-SynHSEscape:
-	; A backslash protects the following character, including the delimiter.
-	INC	HL
-	LD	A,(TmpColS)
-	LD	(HL),A
-	INC	HL
-	DEC	B
-	RET	Z
-	INC	HL
-	LD	A,(TmpColS)
-	LD	(HL),A
-	INC	HL
-	DEC	B
-	JR	NZ,SynHSInside
-	RET
-SynHSClose:
-	INC	HL
-	LD	A,(TmpColS)
-	LD	(HL),A
-	DEC	HL
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	NZ,SynHSScanCh
-	RET
-SynHSSkipCh:
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	NZ,SynHSScanCh
 	RET
 
 ; Paint complete numeric literals before the keyword pass. Supported forms:
@@ -1204,6 +1142,20 @@ SynCWStore:
 	LD	(SynTokenLen),A
 	CP	#17
 	JR	C,SynCWLp
+SynCWLong:
+	LD	A,C
+	OR	A
+	JR	Z,SynCWEnd
+	LD	A,(HL)
+	CALL	SynIsWordChar
+	JR	C,SynCWEnd
+	INC	HL
+	INC	HL
+	DEC	C
+	LD	A,(SynTokenLen)
+	INC	A
+	LD	(SynTokenLen),A
+	JR	SynCWLong
 SynCWEnd:
 	XOR	A
 	LD	(DE),A
@@ -1211,77 +1163,6 @@ SynCWEnd:
 	OR	A
 	SCF
 	RET	Z
-	OR	A
-	RET
-
-SynWordInList:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynWNo
-SynWSp:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynWNo
-	CP	','
-	JR	Z,SynWS1
-	CP	' '
-	JR	Z,SynWS1
-	JR	SynWCmp
-SynWS1:
-	INC	DE
-	JR	SynWSp
-SynWCmp:
-	PUSH	DE
-	LD	HL,SynToken
-	LD	A,(SynTokenLen)
-	LD	C,A
-SynWCmpL:
-	LD	A,C
-	OR	A
-	JR	Z,SynWEndChk
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynWNoPop
-	CP	','
-	JR	Z,SynWNoPop
-	CP	' '
-	JR	Z,SynWNoPop
-	; Both list bytes and the SynToken bytes are already in matching case
-	; (lowered at profile load time when case-insensitive, kept as-is when
-	; case-sensitive), so a direct compare is enough.
-	CP	(HL)
-	JR	NZ,SynWNoPop
-	INC	DE
-	INC	HL
-	DEC	C
-	JR	SynWCmpL
-SynWEndChk:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynWYes
-	CP	','
-	JR	Z,SynWYes
-	CP	' '
-	JR	Z,SynWYes
-SynWNoPop:
-	POP	DE
-SynWSkip:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynWNo
-	CP	','
-	JR	Z,SynWGo
-	INC	DE
-	JR	SynWSkip
-SynWGo:
-	INC	DE
-	JR	SynWordInList
-SynWYes:
-	POP	DE
-	XOR	A
-	RET
-SynWNo:
-	LD	A,#01
 	OR	A
 	RET
 
@@ -1331,31 +1212,6 @@ SynIWCY:
 	OR	A
 	RET
 
-SynExtEq:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynExtEqEnd
-	LD	B,A
-	LD	A,(HL)
-	CALL	SynToLower
-	CP	B
-	RET	NZ
-	INC	HL
-	INC	DE
-	JR	SynExtEq
-SynExtEqEnd:
-	LD	A,(HL)
-	OR	A
-	RET	Z
-	CP	':'
-	RET	Z
-	CP	' '
-	RET	Z
-	CP	#09
-	RET	Z
-	SCF
-	RET
-
 SynToLower:
 	CP	'A'
 	RET	C
@@ -1370,40 +1226,6 @@ SynToUpper:
 	CP	'z'+1
 	RET	NC
 	RES	5,A
-	RET
-
-SynFindBlockClose:
-	LD	A,(SynLineLen)
-	LD	B,A
-	LD	HL,(SynWorkBuf)
-SynFBC0:
-	LD	A,B
-	OR	A
-	SCF
-	RET	Z
-	LD	A,(HL)
-	CP	'*'
-	JR	NZ,SynFBCN
-	INC	HL
-	INC	HL
-	DEC	B
-	LD	A,B
-	OR	A
-	SCF
-	RET	Z
-	LD	A,(HL)
-	CP	'/'
-	JR	Z,SynFBCF
-	DEC	HL
-	DEC	HL
-	INC	B
-SynFBCN:
-	INC	HL
-	INC	HL
-	DEC	B
-	JR	SynFBC0
-SynFBCF:
-	OR	A
 	RET
 
 ; Seed SynCBlockOpen with state entering the first visible line.
@@ -1482,6 +1304,13 @@ SynSCLp:
 	JR	SynSCLp
 
 SynSCOut:
+	LD	A,(HL)
+	LD	C,A
+	CALL	SynIsStringDelim
+	JR	NZ,SynSCOutScan
+	CALL	SynSkipCompString
+	JR	SynSCLp
+SynSCOutScan:
 	LD	A,B
 	CP	#02
 	RET	C
@@ -1551,6 +1380,13 @@ SynSCPBrace:
 	JR	SynSCPStep
 SynSCPOut:
 	LD	A,(HL)
+	LD	C,A
+	CALL	SynIsStringDelim
+	JR	NZ,SynSCPOutScan
+	CALL	SynSkipCompString
+	JR	SynSCPLp
+SynSCPOutScan:
+	LD	A,(HL)
 	CP	'{'
 	JR	Z,SynSCPSetBrace
 	CP	'('
@@ -1575,6 +1411,29 @@ SynSCPStep:
 	INC	HL
 	DEC	B
 	JR	SynSCPLp
+
+; Skip one quoted string in a packed line, without touching its bytes.
+SynSkipCompString:
+	INC	HL
+	DEC	B
+	RET	Z
+SynSCSLp:
+	LD	A,(HL)
+	CP	C
+	JR	Z,SynSCSEnd
+	CP	#5C
+	JR	NZ,SynSkipCompString
+	LD	A,(SynHasBlockCom)
+	CP	#02
+	JR	Z,SynSkipCompString
+	INC	HL
+	DEC	B
+	RET	Z
+	JR	SynSkipCompString
+SynSCSEnd:
+	INC	HL
+	DEC	B
+	RET
 
 ; Seed SynCBlockOpen with state entering the cursor line (BegString).
 ; The recent-line cache makes normal cursor movement and one-line scrolling
@@ -1727,6 +1586,11 @@ SynInvalidateBlockCache:
 ; When the user toggles between two profiles (e.g. C window <-> ASM window)
 ; we just byte-swap the two slots instead of going to disk.
 SynEnsureProfileLoaded:
+	IN	A,(SLOT2)
+	LD	HL,SynBlockPage
+	CP	(HL)
+	LD	(HL),A
+	CALL	NZ,SynInvalidateBlockCache
 	LD	HL,SynProfileName
 	LD	DE,SynLoadedProf
 	CALL	SynStrEq
@@ -1740,7 +1604,9 @@ SynEnsureProfileLoaded:
 	; Check the backup slot.
 	LD	HL,SynProfileName
 	LD	DE,SynLoadedProfBk
+	CALL	SynPageDp2In
 	CALL	SynStrEq
+	CALL	SynPageDp2Out
 	JR	NZ,SynEPL_Fresh
 	; Wanted profile sits in backup — swap with active, no disk I/O.
 	CALL	SynSwapSlots
@@ -1793,6 +1659,7 @@ SynSwapLp:
 ; state first so switching between profiles is clean.
 SynLoadProfile:
 	XOR	A
+	LD	(SynProfileReady),A
 	LD	(SynKeywords1),A
 	LD	(SynKeywords2),A
 	LD	(SynLineCom1),A
@@ -1822,6 +1689,8 @@ SynLoadProfile:
 	LD	HL,SynProfilePath
 	CALL	SynLoadFileToBuf
 	RET	C
+	LD	A,#01
+	LD	(SynProfileReady),A
 	; SynParseProfileBuf reads SynFileBuf (paged out into Dialog_Windows_PG2),
 	; and SynBuildKwIndex uses SynFileBuf as scratch. Page DialogPg2 into
 	; SLOT3 around all SynFileBuf accesses.
@@ -2004,7 +1873,7 @@ SynSC20_Ret:
 
 ; Load HL=<filename path> into (SynLFDst) for up to (SynLFMax) bytes,
 ; null-terminating after actual bytes read. Wraps file I/O with a
-; CaptureDir/RestoreDir(LaunchPathBuf) pair so SYNTAX\*.SYN resolves
+; resident directory save/restore pair so SYNTAX\*.SYN resolves
 ; relative to the KODE.EXE launch directory regardless of where the
 ; user has navigated. CF=0 on success, CF=1 on failure.
 SynLoadFileToBuf:
@@ -2012,7 +1881,7 @@ SynLoadFileToBuf:
 	PUSH	IY
 	; Page Dialog_Windows_PG2 into SLOT3 (so LaunchPathBuf/TempDirBuf are
 	; reachable) AND DOSpage into SLOT0 (so RST #10 hits the DSS dispatcher).
-	; CaptureDir/RestoreDir explicitly require DOSpage at SLOT0.
+	; Resident directory helpers require DOSpage at SLOT0.
 	IN	A,(SLOT3)
 	PUSH	AF
 	LD	A,(DialogPg2)
@@ -2025,23 +1894,23 @@ SynLoadFileToBuf:
 	LD	A,#10
 	OUT	(C),A				; enable VG93
 	; Save user's current dir, ChDir to launch dir (DSS-page is in SLOT0
-	; now, so RST #10 inside CaptureDir/RestoreDir hits DSS dispatcher).
+	; now, so the resident calls reach the DSS dispatcher).
 	LD	HL,TempDirBuf
-	CALL	CaptureDir
+	CALL	SynCaptureDir
 	LD	HL,LaunchPathBuf
-	CALL	RestoreDir
+	CALL	SynRestoreDir
 	; File I/O with relative path (DSS now in launch dir).
 	LD	HL,(SynRelPath)
 	LD	A,#01
 	LD	C,#11
-	RST	#10
+	CALL	SynDss
 	JR	C,SynLFFail
 	LD	(SynProfHnd),A
 	LD	HL,(SynLFDst)
 	LD	DE,(SynLFMax)
 	LD	A,(SynProfHnd)
 	LD	C,#13
-	RST	#10
+	CALL	SynDss
 	JR	C,SynLFCloseFail
 	LD	HL,(SynLFDst)
 	ADD	HL,DE
@@ -2049,21 +1918,21 @@ SynLoadFileToBuf:
 	LD	(HL),A
 	LD	A,(SynProfHnd)
 	LD	C,#12
-	RST	#10
+	CALL	SynDss
 	XOR	A
 	LD	(SynLFRet),A
 	JR	SynLFTeardown
 SynLFCloseFail:
 	LD	A,(SynProfHnd)
 	LD	C,#12
-	RST	#10
+	CALL	SynDss
 SynLFFail:
 	LD	A,#01
 	LD	(SynLFRet),A
 SynLFTeardown:
 	; Restore user's original directory while still in DOS state.
 	LD	HL,TempDirBuf
-	CALL	RestoreDir
+	CALL	SynRestoreDir
 	; Disable VG93, restore SLOT0 and SLOT3.
 	LD	BC,#7FFD
 	XOR	A
@@ -2081,6 +1950,41 @@ SynLFTeardown:
 SynLFOk:
 	OR	A
 	RET
+
+SynDss:
+	PUSH	AF
+	IN	A,(SLOT3)
+	LD	(SynDssPage+1),A
+	POP	AF
+	RST	ToDSS
+	PUSH	AF
+SynDssPage:
+	LD	A,#00
+	OUT	(SLOT3),A
+	POP	AF
+	RET
+
+; Directory arguments and results must survive DSS repaging SLOT3.
+SynCaptureDir:
+	LD	C,Dss.CurDisk
+	CALL	SynDss
+	ADD	A,'A'
+	LD	(CompBuff),A
+	LD	HL,CompBuff+1
+	LD	(HL),':'
+	INC	HL
+	LD	(HL),#00
+	LD	C,Dss.CurDir
+	CALL	SynDss
+	LD	HL,CompBuff
+	LD	DE,TempDirBuf
+	JP	SynStrCopyZ
+SynRestoreDir:
+	LD	DE,CompBuff
+	CALL	SynStrCopyZ
+	LD	HL,CompBuff
+	LD	C,Dss.ChDir
+	JP	SynDss
 
 ; Resident (SLOT1) trampoline for DSS calls the PG2 Build/Run engine makes from
 ; inside the DOS sandwich. DSS subdirectory file/dir traversal returns with SLOT3
@@ -2493,46 +2397,22 @@ SynCSV0:
 	JR	NZ,SynCSV0
 	RET
 
-SynNameEqNoCase:
-	PUSH	HL
-	PUSH	DE
-SynNE0:
-	LD	A,(DE)
-	OR	A
-	JR	Z,SynNEEnd
-	LD	B,A
-	LD	A,(HL)
-	CP	'.'
-	JR	Z,SynNENo
-	OR	A
-	JR	Z,SynNENo
-	CALL	SynToLower
-	CP	B
-	JR	NZ,SynNENo
-	INC	HL
-	INC	DE
-	JR	SynNE0
-SynNEEnd:
-	LD	A,(HL)
-	OR	A
-	JR	Z,SynNEYes
-	CP	'.'
-	JR	Z,SynNEYes
-SynNENo:
-	POP	DE
-	POP	HL
-	LD	A,#01
-	OR	A
-	RET
-SynNEYes:
-	POP	DE
-	POP	HL
-	XOR	A
-	RET
-
 ; Copy current window full name/path into SynNameBuf.
+SynGetTextName:
+	IN	A,(SLOT2)
+	LD	IX,TxtWtab
+	LD	BC,#0026
+SynGTNLp:
+	BIT	7,(IX+#00)
+	JR	NZ,SynGetCurrName
+	CP	(IX+#1D)
+	JR	Z,SynGetWinName
+	ADD	IX,BC
+	JR	SynGTNLp
+
 SynGetCurrName:
 	LD	IX,TxtWtab
+SynGetWinName:
 	BIT	7,(IX+#00)
 	JR	Z,SynGN0
 	LD	HL,SynNameBuf
@@ -2578,7 +2458,6 @@ NotComm:
 SynExtBusy:	DEFB	#00
 SynBaseColor:	DEFB	#00
 SynLang:	DEFB	#00
-SynLoadedLang:	DEFB	#FF
 SynCBlockOpen:	DEFB	#00
 SynRenderPass:	DEFB	#00
 SynRenderLangValid:	DEFB	#00
@@ -2600,6 +2479,7 @@ SynBKICur:	DEFW	#0000
 SynBKIBkt:	DEFB	#00
 SynKwEnd:	DEFW	#0000		; exclusive end of current keyword bucket
 SynBlockTarget:	DEFW	#0000
+SynBlockPage:	DEFB	#FF
 SynBlockCacheNext:	DEFB	#00
 SynBlockCache:	DEFS	192,0		; 64 entries: line pointer + entry state
 SynToken:	DEFS	24,0
@@ -2620,6 +2500,7 @@ SynBrackets:	DEFS	12,0		; bracket chars to highlight (up to 11 + null)
 SynStringDelims:	DEFS	4,0		; string-literal delimiter chars (up to 3 + null)
 SynCaseSensitive:	DEFB	#00
 SynHasBlockCom:	DEFB	#00		; 1 if profile uses /*..*/ block comments
+SynProfileReady:	DEFB	#00		; loaded successfully (also swapped in the LRU)
 SynKeywords1:	DEFS	384,0		; primary keywords CSV (sorted by first letter)
 SynKeywords2:	DEFS	128,0		; secondary keywords CSV (sorted by first letter)
 SynActiveSlotEnd:

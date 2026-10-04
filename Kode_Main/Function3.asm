@@ -147,7 +147,7 @@ NewDisp:
 	LD	HL,FrameHd ; Pointer on frame window
 	CALL	PutFram	    ; Draw frame
 	PUSH	IX
-	CALL	InitPage+6	; Page
+	CALL	InitPageRender	; Page
 	POP	IX
 	CALL	PutIPage	; Store in window page
 	CALL	PutShad	    ; Draw shadow
@@ -165,7 +165,7 @@ NewDSex:
 	LD	HL,FrameSl  ; Pointer on frame selected window
 	CALL	PutFram	    ; Draw frame
 	PUSH	IX
-	CALL	InitPage+6	; Page
+	CALL	InitPageRender	; Page
 	POP	IX
 	CALL	PutIPage	; Store in window page
 	CALL	PutShad	    ; Draw shadow
@@ -1071,7 +1071,7 @@ EditOp6:
 	LD	A,(IX+#1E)
 	OUT	(SLOT3),A
 	PUSH	IX
-	CALL	InitPage+6	; Page
+	CALL	InitPageRender	; Page
 	POP	IX
 	CALL	PutIPage	; Store in window page
 	BIT	6,(IX+#00)

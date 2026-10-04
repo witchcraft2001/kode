@@ -899,9 +899,11 @@ SynBrBk:	BLOCK	12,0
 SynSDBk:	BLOCK	4,0
 SynCSBk:	BLOCK	1,0
 SynHBCBk:	BLOCK	1,0
+SynReadyBk:	BLOCK	1,0
 SynKw1Bk:	BLOCK	384,0
 SynKw2Bk:	BLOCK	128,0
 SynBackupSlotEnd:
+	ASSERT	SynBackupSlotEnd-SynBackupSlot = SynSlotTotalBytes
 
 ;   SynFileBuf — read-once scratch for .syn profile content; reused as
 ;     output buffer during SynBuildKwIndex counting sort.

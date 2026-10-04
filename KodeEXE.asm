@@ -107,6 +107,10 @@ exeLoader.Start:
 	LD	DE,#9000	; !HARDCODE
 	CALL	DePACK					; Prepare
 ;-[]
+	LD	HL,KODE_PREPARE.STRING
+	LD	C,Dss.PChars
+	CALL	InitialConsole.ConDss		; banner at the current console cursor
+	CALL	InitialConsole.ConsoleGrab	; include banner before palette/font setup
 	CALL	#9000	; !HARDCODE mem map; Prepare
 
 ;

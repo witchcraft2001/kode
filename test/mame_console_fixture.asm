@@ -1,5 +1,7 @@
 ; DSS parent for real BIOS console restoration checks in Sprinter/MAME.
 ; Build with -DCON_MODE=2|3 -DCON_PAGE=0|1 and --raw=<fixture>.EXE.
+	includelua '../shared_includes/LUA/Functions.LUA'
+	INCLUDE '../version.inc'
 	INCLUDE '../Shared_Includes/constants/SP2000.inc'
 	INCLUDE '../Shared_Includes/constants/bios_equ.inc'
 	INCLUDE '../Shared_Includes/constants/dss_equ.inc'
@@ -58,10 +60,25 @@ Fill	LD	A,D
 	LD	A,(Pages)
 	LD	C,#B3
 	CALL	Copy
-	LD	DE,#1F00+CON_MODE*40-41	; bottom-right: mode2 x39, mode3 x79
-	LD	C,Dss.Locate
+	LD	A,(Pages+1)	; preserve the original screen
+	LD	C,#B2
+	CALL	Copy
+	CALL	StartCursor
+	LD	HL,Banner	; reference rendering through real DSS
+	LD	C,Dss.PChars
 	RST	#10
 	DI
+	LD	C,Dss.Cursor
+	RST	#10
+	DI
+	LD	(ExpectedCursor),DE
+	LD	A,(Pages)	; expected screen now includes the banner
+	LD	C,#B2
+	CALL	Copy
+	LD	A,(Pages+1)	; Kode starts from the original screen/cursor
+	LD	C,#B3
+	CALL	Copy
+	CALL	StartCursor
 	LD	HL,Command
 	LD	BC,#0040
 	EI
@@ -108,6 +125,16 @@ Stop	EI
 	JR	Z,Stop
 	LD	BC,#0041
 	RST	#10
+StartCursor
+	IF CON_PAGE = 0
+	LD	DE,#0507	; middle of the screen
+	ELSE
+	LD	DE,#1F00+CON_MODE*40-41	; bottom-right, exercises scrolling
+	ENDIF
+	LD	C,Dss.Locate
+	RST	#10
+	DI
+	RET
 Copy	LD	B,A
 	LD	IX,#C000
 	LD	HL,#2050
@@ -116,6 +143,7 @@ Copy	LD	B,A
 	RST	#08
 	DI
 	RET
+Banner	DZ 'Kode v ',_progVERSION,', Sprinter Team, ',_luaBUILD_DATEfull,#0D,#0A
 Command	BYTE 'C:\KODE.EXE C:\MAIN.ASM',0
 Pages	BYTE 0,0,0,0
 ExitFlag	BYTE 0
@@ -126,5 +154,6 @@ Result	BYTE 0
 Mode	BYTE 0
 Page	BYTE 0
 Cursor	WORD 0
+ExpectedCursor	WORD 0
 End
 	ENT

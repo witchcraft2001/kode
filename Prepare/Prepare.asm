@@ -14,15 +14,6 @@ Buffer	EQU	$-#1000
 	LD	(sp_save),SP
 	LD	SP,Prepare.stackPoint
 
-	LD	DE,#1F00
-	LD	C,BIOS.LP_SET_PLACE				; Setup current in
-	RST	ToBIOS
-
-	LD	HL,STRING
-	LD	BC,#50*256 + BIOS.LP_PRINT_LINE6		; On screen without
-	LD	D,0
-	RST	ToBIOS
-
 	CALL	GEN_PALETTE_ONE
 ;
 ; [ ]
@@ -183,7 +174,7 @@ PALETTE:	DZ	#00, #00, #00
 		DZ	#FC, #FC, #FC
 
 
-STRING:	DZ	'Kode v ',_progVERSION,', Sprinter Team, ',_luaBUILD_DATEfull
+STRING:	DZ	'Kode v ',_progVERSION,', Sprinter Team, ',_luaBUILD_DATEfull,#0D,#0A
 
  ENDMODULE
 ;

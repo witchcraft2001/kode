@@ -279,10 +279,10 @@ GetBufA:	PUSH	HL
 ; Procedure pages text
 ; 28*78 page
 InitPage
-	CALL	OnlySyntax
 	LD	A,(ReadyStr)	; Was not touched
 	OR	A
 	CALL	Z,PutString
+InitPageRender:
 	LD	A,#01
 	LD	(SynRenderPass),A
 	CALL	SynPrepareRender

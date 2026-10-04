@@ -76,6 +76,7 @@ function machine() {
   for(const n of ['InitBar','ResMBar','InitStLine','SetCurs','InitEvent']) hooks[n]=()=>{};
   hooks.GetMousInfo=()=>mouse();
   function call(label, regs={}, limit=500000){
+    stopped=false;
     const s=cpu.getState();Object.assign(s,{pc:sym[label]??loader[label],sp:0x7ff0,ix:0x1234,iy:0x8010},regs);
     assert(s.pc!==undefined,label);word(s.sp,0x7ff8);cpu.setState(s);
     for(let n=0;n<limit;n++) {
@@ -120,11 +121,13 @@ check('initial loader captures the same screen before editor code',()=>{
  const before=m.state(),banks=[...m.banks];const captured=m.call('ConsoleGrab',{pc:loader.ConsoleGrab});assert.deepStrictEqual(m.state(),before);assert.deepStrictEqual(m.banks,banks);assert.strictEqual(captured.ix,0x1234);assert.strictEqual(captured.iy,0x8010);
  assert.deepStrictEqual(Buffer.from(m.ram.subarray(7*0x4000,7*0x4000+5120)),before.screen);
 });
-for (const failure of ['allocation', 'read', null]) check('loader allocation/metadata: '+(failure||'normal startup'),()=>{
+const startups = ['allocation', 'read'].map(failure=>({failure,mode:2,page:1,pos:0x1f27}));
+for(const mode of [2,3]) for(const page of [0,1]) for(const pos of [0x0507,0x1f00+(mode===2?39:79)]) startups.push({mode,page,pos});
+for (const {failure,mode,page,pos} of startups) check('loader banner/metadata: '+(failure||`mode ${mode}, page ${page}, cursor ${pos.toString(16)}`),()=>{
  const m=machine(),exe=fs.readFileSync('build/KODE.EXE');
  m.banks[0]=8;m.banks[1]=14;
  m.ram.set(exe.subarray(exe.readUInt32LE(4),exe.readUInt32LE(4)+exe.readUInt16LE(8)),14*0x4000+(exe.readUInt16LE(16)&0x3fff));
- m.video(2,1,0x1f27);m.screens[1].set(pattern(54));const initial=m.state();let reads=0,freed=0,exited=false;
+ m.video(mode,page,pos);m.screens[page].set(pattern(54));const initial=m.state();let reads=0,freed=0,exited=false,printed=0,expected=null;
  const modules=['Prepare','KodeMain','DialogWN','MenuBar','Command'];
  m.bios(s=>{
   if(s.c===0xc2){assert.strictEqual(s.b,8);s.a=42;s.flags.C=+(failure==='allocation');return true;}
@@ -134,6 +137,26 @@ for (const failure of ['allocation', 'read', null]) check('loader allocation/met
  });
  m.dss(s=>{
   const hl=s.h<<8|s.l;
+  if(s.c===0x5c){
+   printed++;assert.deepStrictEqual(m.state(),initial,'Banner starts at the original cursor');
+   const bytes=[];for(let i=0;m.rd(hl+i);i++)bytes.push(m.rd(hl+i));
+   const banner=Buffer.from(bytes).toString('latin1');
+   assert(/^Kode v 0\.1\.1, Sprinter Team, \d{2}\.\d{2}\.\d{4}\r\n$/.test(banner),banner);
+   const columns=mode===2?40:80,physical=80/columns;let x=pos&255,y=pos>>>8,scrolls=0;
+   const nextLine=()=>{if(++y===32){m.screens[page].copyWithin(0,160);m.screens[page].fill(0,4960);y=31;scrolls++;}};
+   for(const c of bytes){
+    if(c===13)x=0;
+    else if(c===10)nextLine();
+    else {for(let j=0;j<physical;j++)m.screens[page][(y*80+x*physical+j)*2]=c;if(++x===columns){x=0;nextLine();}}
+   }
+   assert.strictEqual(scrolls,pos>>>8===31?Math.floor(((pos&255)+bytes.length-2)/columns)+1:0);
+   m.video(mode,page,y<<8|x);expected=m.state();
+   if(pos>>>8!==31){
+    assert.strictEqual(expected.screen[(5*80+7*physical)*2],'K'.charCodeAt(0));
+    assert.deepStrictEqual(expected.screen.subarray(0,(5*80+7*physical)*2),initial.screen.subarray(0,(5*80+7*physical)*2));
+   }
+   m.banks[3]=9;s.ix=0xbabe;s.iy=0xd00d;s.h=0xde;s.l=0xad;s.flags.C=0;return true;
+  }
   if(s.c===0x41){exited=true;m.stop();return true;}
   if(s.c===0x13){
    if(failure==='read'){s.flags.C=1;return true;}
@@ -148,17 +171,18 @@ for (const failure of ['allocation', 'read', null]) check('loader allocation/met
   if(s.c===0x11){s.flags.C=1;return true;}
   return false;
  });
- m.hooks[0x9000]=()=>{m.screens[1].fill(32);m.video(2,1,0);};
+ m.hooks[0x9000]=()=>{assert.strictEqual(printed,1);assert.deepStrictEqual(m.state(),expected);m.screens[page].fill(32);m.video(mode,page,0);};
  m.hooks.KodeStart=()=>{m.stop();};
  m.call('exeLoader.Start',{pc:loader['exeLoader.Start'],ix:0x7980},4000000);
- if(failure){assert(exited);assert.deepStrictEqual(m.state(),initial);assert.strictEqual(freed,failure==='read'?1:0);}
+ if(failure){assert.strictEqual(printed,0);assert(exited);assert.deepStrictEqual(m.state(),initial);assert.strictEqual(freed,failure==='read'?1:0);}
  else {
   const main=fs.readFileSync('build/bin/KodeMain.bin');
   assert.deepStrictEqual(Buffer.from(m.ram.subarray(main.length-256,main.length)),main.subarray(main.length-256),'Loader return stack must not overwrite the end of Main');
   assert.strictEqual(reads,5);assert.strictEqual(m.rd(sym.BldLogPg),7);assert.strictEqual(m.rd(sym.BldDosPg),8);
-  m.banks[3]=3;assert.strictEqual(m.rd(sym.ConsoleReady),1);assert.strictEqual(m.rd(sym.ConsoleMode),2);
-  assert.strictEqual(m.rd(sym.ConsolePage),1);assert.strictEqual(m.rd(sym.ConsolePos),39);assert.strictEqual(m.rd(sym.ConsolePos+1),31);
-  assert.deepStrictEqual(Buffer.from(m.ram.subarray(7*0x4000,7*0x4000+5120)),initial.screen);
+  m.banks[3]=3;assert.strictEqual(m.rd(sym.ConsoleReady),1);assert.strictEqual(m.rd(sym.ConsoleMode),mode);
+  assert.strictEqual(m.rd(sym.ConsolePage),page);assert.strictEqual(m.rd(sym.ConsolePos),expected.pos&255);assert.strictEqual(m.rd(sym.ConsolePos+1),expected.pos>>>8);
+  assert.deepStrictEqual(Buffer.from(m.ram.subarray(7*0x4000,7*0x4000+5120)),expected.screen);
+  m.call('ConsoleRestore');assert.deepStrictEqual(m.state(),expected,'Restoration includes banner and its ending cursor');
  }
 });
 check('initial list selection uses context, not its hotkey',()=>{

@@ -44,8 +44,8 @@ local co = coroutine.create(function()
    assert(read(sy.Match) == 1, name .. ': characters/attributes differ')
    assert(read(sy.Result) == 0, name .. ': Kode exit failed')
    assert(read(sy.Mode) == mode and read(sy.Page) == page, name .. ': mode/page differ')
-   assert(read(sy.Cursor) == mode * 40 - 41 and read(sy.Cursor + 1) == 31,
-          name .. ': bottom-right cursor differs')
+   assert(read(sy.Cursor) == read(sy.ExpectedCursor) and read(sy.Cursor + 1) == read(sy.ExpectedCursor + 1),
+          name .. ': post-banner cursor differs')
    print('PASS', name, '5120 bytes, mode, page, cursor')
    p:write_u8(0x10000 + sy.ExitFlag, 1)
    frames(700)
