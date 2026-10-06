@@ -907,7 +907,8 @@ SynBackupSlotEnd:
 
 ;   SynFileBuf — read-once scratch for .syn profile content; reused as
 ;     output buffer during SynBuildKwIndex counting sort.
-SynFileBuf:	BLOCK	640,0
+; SynFileBuf shares the settings scratch at the end of this page.
+; Profile loading, makefile scanning and settings rendering never overlap.
 
 ;   SynIndexBuf — read-once scratch for SYNTAX\INDEX.LST content; lookups
 ;     run directly against this buffer.
@@ -1148,6 +1149,7 @@ SynBKI5NoC:
 ;[]===========================================================[]
 	INCLUDE	"BuildRun.asm"
 ;[]===========================================================[]
+SynFileBuf:
 SetupBuff:
 	DEFW	#FFFF
 	ASSERT	SetupBuff + #1102 <= #FFFF	; KODE.SET render reserve

@@ -159,4 +159,8 @@ ResA		DEFB	0
 OutBuf		DEFS	260,0
 TailBuf		DEFS	#80,0
 
+BldCopyStable	RET
+BldDssTramp	RST	ToDSS
+	RET
+
 	INCLUDE	'../Dialog_Windows/BuildScan.asm'

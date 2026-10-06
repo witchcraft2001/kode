@@ -97,6 +97,8 @@ function machine() {
     video:(m,p,c)=>{mode=m;page=p;pos=c;},
     bios:f=>{biosTrap=f;}, dss:f=>{dssTrap=f;}, stop:()=>{stopped=true;}, child:f=>{exec=f;}, mouse:f=>{mouse=f;}, scan:f=>{scan=f;}, sym};
 }
+module.exports = {machine, sym};
+if (require.main === module) {
 let pass=0;
 function check(name,f){f();pass++;console.log('ok - '+name);}
 const pattern=n=>Buffer.from(Array.from({length:5120},(_,i)=>(i*17+n)&255));
@@ -141,7 +143,9 @@ for (const {failure,mode,page,pos} of startups) check('loader banner/metadata: '
    printed++;assert.deepStrictEqual(m.state(),initial,'Banner starts at the original cursor');
    const bytes=[];for(let i=0;m.rd(hl+i);i++)bytes.push(m.rd(hl+i));
    const banner=Buffer.from(bytes).toString('latin1');
-   assert(/^Kode v 0\.1\.1, Sprinter Team, \d{2}\.\d{2}\.\d{4}\r\n$/.test(banner),banner);
+   const version=fs.readFileSync('version.inc','utf8').match(/DEFINE _progVERSION\s+'([^']+)'/)[1];
+   assert(banner.startsWith('Kode v '+version+', Sprinter Team, '),banner);
+   assert(/\d{2}\.\d{2}\.\d{4}\r\n$/.test(banner),banner);
    const columns=mode===2?40:80,physical=80/columns;let x=pos&255,y=pos>>>8,scrolls=0;
    const nextLine=()=>{if(++y===32){m.screens[page].copyWithin(0,160);m.screens[page].fill(0,4960);y=31;scrolls++;}};
    for(const c of bytes){
@@ -225,7 +229,7 @@ for(const action of ['BldDoBuild','BldDoRun','BldDoTarg']) for(const kind of ['s
   m.hooks.BldDecide=()=>{const s=m.cpu.getState();s.a=kind==='no command'?1:0;m.cpu.setState(s);};
   m.hooks.BldScanMk=()=>{const s=m.cpu.getState();s.a=1;s.flags.C=+(kind==='no command');m.cpu.setState(s);};
   m.hooks.DialogW=()=>{m.wr(sym.what,4);m.wr(sym.what+1,kind==='cancel'?0x37:0x36);m.wr(sym.what+2,0);};
-  m.hooks.BldNthTgt=()=>{m.wr(sym.BldTgtName,0);};m.hooks.BldMessage=()=>{};
+  m.hooks.BldNthTgt=()=>{m.wr(sym.BldTgtName,0);const s=m.cpu.getState();s.flags.C=0;m.cpu.setState(s);};m.hooks.BldMessage=()=>{};
   m.hooks.BldWaitKode=()=>{wait++;};
   m.wr(sym.ScanDown,0x44);
   m.child(()=>{ran++;if(kind==='load error')return{code:3,loadError:true};m.screens[0][0]=90;return{code:kind==='child error'?9:0};});
@@ -279,3 +283,5 @@ check('exit restores console through resident page switch',()=>{
  m.video(3,0,0);m.banks[3]=11;m.call('BldConsoleExit');assert.deepStrictEqual(m.state(),saved);assert.strictEqual(m.banks[3],11);
 });
 console.log('PASS: '+pass);
+
+}

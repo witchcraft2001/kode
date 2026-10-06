@@ -6,7 +6,7 @@
 ; Delegates all "decide what to launch" logic to BuildScan.asm (included at
 ; the end of this file) and spawns the child via Dss.Exec. Runs dialogs via
 ; the resident DialogW; does file probes and EXEC inside a DOS sandwich
-; (DOSpage->SLOT0 + #7FFD=#10), bracketed by CaptureDir/RestoreDir so the
+; (DOSpage->SLOT0 + #7FFD=#10), bracketed by directory save/restore so the
 ; editor's working directory survives a child that ChDirs.
 ;
 ; Verdict returned in A to the stub: 0 done, 1 SaveAll+resume, 2 repaint.
@@ -52,6 +52,7 @@ BldBR	LD	(BldBRmode),A
 BrGo	CALL	BldGetDir
 	CALL	BldSaveEditor
 	CALL	BldDosIn
+	JR	C,BrDirErr
 	LD	A,(BldBRmode)
 	CALL	BldDecide
 	LD	(BldFound),A
@@ -59,6 +60,9 @@ BrGo	CALL	BldGetDir
 	JR	NZ,BrNoExec
 BrExec	CALL	ConsoleRestore
 	CALL	BldExecCon
+	JR	BrNoExec
+BrDirErr	LD	A,#03
+	LD	(BldFound),A
 BrNoExec	CALL	BldDosOut
 	CALL	BldResetKey		; after Main is back in SLOT0, even on load failure
 	LD	A,(BldFound)		; grab console only if a child actually ran
@@ -73,9 +77,18 @@ BrNoExec	CALL	BldDosOut
 	CALL	NZ,BldWaitKode		; pause only for a non-zero child exit code
 BrReinit
 	CALL	BldReInit
+	LD	A,(BldRestoreErr)
+	OR	A
+	LD	HL,BldMCwd
+	JR	NZ,BrMsg
 	LD	A,(BldFound)
 	OR	A
 	JR	Z,BrErrChk
+	CP	#02
+	LD	HL,BldMIo
+	JR	Z,BrMsg
+	LD	HL,BldMDir
+	JR	NC,BrMsg
 	LD	A,(BldBRmode)		; nothing found
 	OR	A
 	LD	HL,BldMNoBuild
@@ -152,6 +165,8 @@ BldDoTarg
 	JP	BldRetV
 BtGo	CALL	BldGetDir
 	CALL	BldDosIn
+	LD	A,#03
+	JR	C,BtBad
 	XOR	A			; mode 0 - collect targets
 	CALL	BldScanMk
 	JR	C,BtNoMk
@@ -159,14 +174,27 @@ BtGo	CALL	BldGetDir
 	XOR	A
 	LD	(BldNoMk),A
 	JR	BtAfter
-BtNoMk	LD	A,#01
-	LD	(BldNoMk),A
+BtNoMk	LD	A,(BldIoErr)
+	OR	A
+	LD	A,#01
+	JR	Z,BtBad
+	INC	A
+BtBad	LD	(BldNoMk),A
 BtAfter	CALL	BldDosOut
+	LD	A,(BldRestoreErr)
+	OR	A
+	LD	HL,BldMCwd
+	JR	NZ,BtMsg
 	LD	A,(BldNoMk)
 	OR	A
 	JR	Z,BtHave
+	CP	#02
+	LD	HL,BldMIo
+	JR	Z,BtMsg
+	LD	HL,BldMDir
+	JR	NC,BtMsg
 	LD	HL,BldMNoMake
-	CALL	BldMessage
+BtMsg	CALL	BldMessage
 	JP	BldV0
 BtHave	LD	A,(BldTgtCnt)
 	OR	A
@@ -187,6 +215,7 @@ BtShow	LD	HL,DbldTarg
 	INC	HL
 	LD	A,(HL)			; selected list index (what+2)
 	CALL	BldNthTgt		; -> BldTgtName
+	JP	C,BldV0
 	LD	HL,BldNMkSp		; "MAKE.EXE "
 	CALL	BldStrCpy
 	LD	HL,BldTgtName
@@ -194,6 +223,7 @@ BtShow	LD	HL,DbldTarg
 	CALL	BldGetDir
 	CALL	BldSaveEditor
 	CALL	BldDosIn
+	JP	C,BrDirErr
 	XOR	A
 	LD	(BldFound),A		; join the same post-EXEC path as Build/Run
 	JP	BrExec
@@ -213,7 +243,11 @@ BldDoShow
 BldAskSave
 	LD	A,(BldSkip)
 	OR	A
-	JR	NZ,BasCont		; already answered this round
+	JR	Z,BasAsk
+	CALL	BldAnyMod		; save cancelled or failed: do not launch
+	JR	NZ,BasAbort
+	JR	BasCont
+BasAsk
 	CALL	BldAnyMod
 	JR	Z,BasCont		; nothing modified
 	CALL	BldPatchSure
@@ -283,12 +317,40 @@ BpsCp	LD	A,(HL)
 	OUT	(SLOT2),A
 	RET
 ;[]===========================================================[]
-; Current window's directory (up to and including the last '\') -> BldDirBuf.
+; Current window's full directory -> BldDirBuf (only roots keep trailing '\').
 ; No '\' -> empty (skip ChDir, use current DSS dir).
 BldGetDir
-	CALL	SynGetCurrName		; -> SynNameBuf (resident, ASCIIZ)
-	LD	HL,SynNameBuf
-	LD	DE,#0000		; DE = pos just after last '\'
+	LD	A,(TxtWtab)
+	BIT	7,A
+	JR	NZ,BgdEmpty
+	AND	#0F
+	INC	A
+	LD	B,A
+	LD	HL,NameTab-#80
+	LD	DE,#0080
+BgdName	ADD	HL,DE
+	DJNZ	BgdName
+	IN	A,(SLOT2)
+	PUSH	AF
+	LD	A,(DialogPg1)
+	OUT	(SLOT2),A
+	LD	DE,BldDirBuf
+	LD	B,#7F
+BgdRead	LD	A,(HL)
+	RES	7,A
+	LD	(DE),A
+	INC	HL
+	INC	DE
+	OR	A
+	JR	Z,BgdReadEnd
+	DJNZ	BgdRead
+	XOR	A
+	LD	(DE),A
+BgdReadEnd
+	POP	AF
+	OUT	(SLOT2),A
+	LD	HL,BldDirBuf
+	LD	DE,#0000
 BgdSc	LD	A,(HL)
 	OR	A
 	JR	Z,BgdEnd
@@ -301,44 +363,34 @@ BgdNx	INC	HL
 	JR	BgdSc
 BgdEnd	LD	A,D
 	OR	E
-	JR	NZ,BgdCp
+	JR	NZ,BgdTrim
+BgdEmpty
 	XOR	A
-	LD	(BldDirBuf),A		; no directory part
+	LD	(BldDirBuf),A
 	RET
-BgdCp	LD	HL,SynNameBuf
-	LD	BC,BldDirBuf
-BgdCp1	LD	A,(HL)
-	LD	(BC),A
-	INC	HL
-	INC	BC
-	LD	A,H
-	CP	D
-	JR	NZ,BgdCp1
-	LD	A,L
-	CP	E
-	JR	NZ,BgdCp1
-	; BC now points just past the copied trailing '\'. Dss.ChDir wants
-	; "X:\DIR" (uppercase drive, NO trailing '\'), matching CaptureDir's
-	; format; a trailing '\' or lowercase drive crashes ChDir -> warm reset.
-	; Strip the trailing '\' unless the path is the root "X:\".
-	PUSH	BC
-	POP	HL			; HL = end pointer
-	LD	DE,BldDirBuf+3		; "X:\" -> root, keep the '\'
+BgdTrim	EX	DE,HL
+	LD	DE,BldDirBuf+3		; retain the slash in X:\ or \
+	PUSH	HL
 	OR	A
 	SBC	HL,DE
-	JR	Z,BgdNul		; root: leave "X:\"
-	DEC	BC			; drop the trailing '\'
-BgdNul	LD	A,#00
-	LD	(BC),A			; terminate
-	; Uppercase the drive letter (window names use a lowercase drive).
+	POP	HL
+	JR	Z,BgdNul
+	LD	DE,BldDirBuf+1
+	PUSH	HL
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	JR	Z,BgdNul
+	DEC	HL			; DSS requires no trailing slash in subdirs
+BgdNul	LD	(HL),#00
 	LD	A,(BldDirBuf)
 	CP	'a'
-	JR	C,BgdUp
+	RET	C
 	CP	'z'+1
-	JR	NC,BgdUp
+	RET	NC
 	SUB	#20
 	LD	(BldDirBuf),A
-BgdUp	RET
+	RET
 ;[]===========================================================[]
 ; DOS sandwich: DOSpage->SLOT0, VG93 on, save cwd and enter the project dir.
 ; Dss.ChDir uses SLOT3 as a directory workspace. Its path must therefore live
@@ -359,7 +411,7 @@ BldDosIn
 	LD	A,#10
 	OUT	(C),A			; enable VG93
 	LD	HL,TempDirBuf
-	CALL	CaptureDir		; save caller's cwd
+	CALL	SynCaptureDir		; resident buffer survives DSS paging
 	LD	A,(BldDirBuf)
 	OR	A
 	RET	Z			; unnamed file - retain current cwd
@@ -373,6 +425,9 @@ BldDosOut
 	CALL	BldCopyStable
 	LD	C,Dss.ChDir
 	CALL	BldDssTramp
+	JR	C,BdoErr
+	XOR	A
+BdoErr	LD	(BldRestoreErr),A
 	LD	BC,#7FFD
 	SUB	A
 	OUT	(C),A			; VG93 off
@@ -475,6 +530,10 @@ BldCopyZ
 ;[]===========================================================[]
 ; Copy the Nth (#0D-separated) FuncBuffer entry to BldTgtName. In: A = index.
 BldNthTgt
+	LD	HL,BldTgtCnt
+	CP	(HL)
+	CCF
+	RET	C
 	LD	HL,FuncBuffer
 	OR	A
 	JR	Z,BntCp
@@ -606,16 +665,17 @@ BldReInit
 BldAct		DEFB	#00
 BldSkip		DEFB	#00		; 1 = save prompt already answered
 BldBRmode	DEFB	#00		; 0 Build / 1 Run
-BldFound	DEFB	#00		; 0 command found / 1 nothing
+BldFound	DEFB	#00		; 0 found, 1 absent, 2 I/O error, 3 ChDir error
 BldErrF		DEFB	#00		; 1 = Exec load error
 BldErr		DEFB	#00		; exec error / child exit code
 BldNoMk		DEFB	#00
 BldTgtCnt	DEFB	#00
+BldRestoreErr	DEFB	#00
 BldSavS0	DEFB	#00
 BldSavSP	DEFW	#0000		; SP saved across Dss.Exec (child may corrupt it)
 BldSavVM	DEFB	#00		; Kode's video mode, saved around a child
 BldSavVP	DEFB	#00		; Kode's screen page, saved around a child
-BldDirBuf	DEFS	80,0		; "X:\DIR\",0 (or empty)
+BldDirBuf	DEFS	128,0		; "X:\DIR\",0 (or empty)
 BldTgtName	DEFS	25,0
 BldExMsg	DEFS	40,0		; "Exit code NNN - press any key"
 
@@ -624,6 +684,9 @@ BldTxPress	DEFB	" - press any key",#0D,#0A,0
 BldTxErr	DEFB	"Exec error ",0
 BldNMkSp	DEFB	"MAKE.EXE ",0
 BldTxMod	DEFB	"    Modified files exist.",0
+BldMIo		DEFB	"File I/O error",0
+BldMDir		DEFB	"Cannot enter project dir",0
+BldMCwd		DEFB	"Cannot restore directory",0
 BldMNoBuild	DEFB	"No BUILD.BAT or MAKEFILE",0
 BldMNoMake	DEFB	"No MAKEFILE",0
 BldMNoRun	DEFB	"No RUN.BAT or run target",0

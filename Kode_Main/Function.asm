@@ -948,6 +948,9 @@ SaveAll	LD	IX,TxtWtab
 	CALL	Z,SaveFile
 	POP	DE
 	POP	IX
+	LD	A,(ReadyFile)
+	OR	A
+	JR	Z,SaveAllE		; stop after a cancelled/failed save
 SaveAll1
 	ADD	IX,DE
 	BIT	7,(IX+#00)
@@ -967,6 +970,9 @@ SaveAll1
 	CALL	SetWind
 	CALL	SaveFile
 	POP	DE
+	LD	A,(ReadyFile)
+	OR	A
+	JR	Z,SaveAllE
 	LD	IX,TxtWtab
 	JR	SaveAll1
 SaveAllE
