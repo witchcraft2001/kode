@@ -11,6 +11,7 @@
   - `./run/create_floppy_image.sh`
 - `./run/make.sh` requires `sjasmplus` in `PATH` and the local helper tool `Tools/mhmt`.
 - `./run/create_floppy_image.sh` requires `mtools` (`mformat`, `mcopy`, `mmd`) and produces a FAT12 floppy image.
+- `./run/dist.sh` packages a release zip (`build/kode-<version>.zip`) with `KODE.EXE`, `SYNTAX/`, generated `FILE_ID.DIZ`/`version.txt` and the manuals from `doc/` (Russian manual is recoded UTF-8 → CP866). Requires `zip` and `iconv`.
 
 ## Artifacts and hygiene
 - Generated artifacts live in `Build/` and `build/`; both are ignored.

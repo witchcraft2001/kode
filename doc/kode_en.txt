@@ -1,0 +1,244 @@
+========================================================================
+ KODE v.0.1.2  -  text editor for the Sprinter computer
+                  (Peters Plus, Estex/DSS)
+
+ Based on TASM source code by Anton Enin (1999).
+ Sprinter Team revision by Anatoliy Belyanskiy.
+ Author: Dmitry Mikhalchenkov, FidoNet 2:5030/1997.10
+========================================================================
+
+WHAT IT IS
+----------
+KODE is a multi-window text editor for the Sprinter in the spirit of
+the old TASM/Borland IDE editors: a menu bar, overlapping text windows,
+context help in the status line, mouse support and user-definable
+syntax highlighting. It is aimed at source code (Z80 assembler, C,
+Pascal, batch files, makefiles) but works with any plain text.
+
+The program runs under DSS in the 80x32 text screen mode (16 colors).
+A PS/2 keyboard is required; a mouse is optional but recommended.
+
+
+QUICK START
+-----------
+1. Unpack the archive into a directory, e.g. C:\KODE\. For work you
+   need KODE.EXE and the SYNTAX\ subdirectory (syntax profiles; without
+   it the editor still runs, highlighting is just disabled).
+
+2. Run KODE.EXE. To open a file right away, pass its name:
+
+     KODE.EXE MAIN.ASM
+     KODE.EXE B:\PROJECT\MAIN.ASM
+
+   If the file does not exist, Kode opens an empty window bound to
+   that name, so the first Save creates it.
+
+3. The screen: menu bar on top (F10 or Alt+letter opens it, a mouse
+   click works too), a status line with shortcuts and context help at
+   the bottom, and text windows on the desktop in between.
+
+4. Settings live in KODE.SET, written next to KODE.EXE by
+   Options -> Save setup and loaded automatically at startup.
+
+
+FILES
+-----
+Up to 15 text windows can be open at once; each window holds up to
+about 32 KB of text. A line can be up to 240 characters long.
+
+KODE.EXE           the program
+KODE.SET           your settings (created by Options -> Save setup)
+SYNTAX\            syntax highlight profiles (INDEX.LST + *.SYN)
+KODE_RU.TXT        manual in Russian (CP866)
+KODE_EN.TXT        this manual
+FILE_ID.DIZ        archive description
+VERSION.TXT        release version
+
+Open (F3) shows a file dialog: type a name or a mask in the Name line,
+or pick a file in the Files box (Enter enters a subdirectory, ".."
+goes up). Buttons:
+
+  Open     open the file in a NEW window
+  Replac   load the file into the CURRENT window, replacing its text
+  Import   open and convert the file in a new window
+
+The file's own line-ending style (CRLF, LF or CR) is detected on load
+and preserved on save; TABs are expanded to 4 or 8 spaces depending
+on the Tab width option.
+
+On every save the previous file version is kept as a backup: its name
+is derived by replacing the last extension character with '_' or by
+appending '_' if the extension is shorter than 3 characters
+(MAIN.ASM -> MAIN.AS_, TEST.CC -> TEST.CC_, TEST.C -> TEST.C__).
+With no extension, the last name character becomes '_'.
+
+
+MENUS
+-----
+File       New (F4), Open... (F3), Save (F2), Save as..., Save all,
+           Print / Printer setup (not implemented yet), Exit (Alt+X)
+
+Edit       Cut (Ctrl+X), Cut&Append (Shift+Del), Copy (Ctrl+C),
+           Append (Ctrl+Ins), Paste (Ctrl+V), Clear (Del)
+
+Search     Find... (F7), Replace... (F8), Search again (Shift+F7),
+           Go to line... (Shift+F8)
+
+Run        Run (Ctrl+F9), Parameters...,
+           Call debugger (not implemented yet)
+
+Build      Build (F9), Target..., Show console log
+
+Options    Editor..., Colors..., Save setup
+
+Windows    Tile, Cascade, Close all, Refresh display,
+           List... (Alt+0)
+
+Help       Editor..., Windows... (not implemented yet),
+           About version...
+
+A letter underlined by color (shown as ~X~ in the sources) is the
+item's hot key.
+
+
+EDITING KEYS
+------------
+Arrows               move cursor
+Home / End           line start / line end
+PgUp / PgDn          page up / down
+Ctrl+Left / Right    previous / next word
+Ctrl+Up / Down       scroll text one line
+Ctrl+Home / End      text start / text end
+Ctrl+PgUp / PgDn     scroll the page horizontally
+Ctrl+Backspace       delete word
+Ctrl+Y               delete line
+Ins                  insert / overwrite mode
+Del                  delete char; deletes the selected block
+Tab / Shift+Tab      tab forward / back (Label Tab size before the
+                     first column, Tab size after it)
+Enter                new line (auto-indent keeps the leading spaces)
+
+Selecting a block:
+Shift+Up / Down      extend the mark line by line
+Shift+Home           set the block start at the cursor
+Shift+End            set the block end at the cursor
+Alt+Esc              clear the mark
+
+Clipboard (a common buffer, shared by all windows):
+Ctrl+X               cut block      Shift+Del   cut and append
+Ctrl+C               copy block     Ctrl+Ins    copy and append
+Ctrl+V               paste          Del         delete block
+
+Search options in the Find/Replace dialogs: case sensitive, whole
+words only, scope (global / selected text), direction (forward /
+backward), origin (from cursor / entire scope) and "Labels only" -
+match only inside the label field of a line (before the Label Tab
+position). Replace also offers "Prompt on replace" and a separate
+RepAll button that replaces everything without asking.
+
+Russian layout: press both Shift keys together to toggle; "rus"
+appears in the status line. Shift+Space selects Russian directly,
+Shift+Enter selects Latin.
+
+
+WINDOWS
+-------
+F5                 zoom the window to full screen / back
+F6 / Shift+F6      next / previous window
+Alt+F3             close the window
+Ctrl+F5            move/resize: arrows move, Shift+arrows resize,
+                   Enter accepts, Esc cancels
+Alt+F10            the window's local menu (same as the icon in the
+                   window's top-left corner): the clipboard commands
+
+Windows -> Tile arranges windows evenly, Cascade stacks them,
+List (Alt+0) shows all open windows and lets you jump or delete one,
+Refresh display repaints the screen.
+
+
+BUILD AND RUN
+-------------
+The project directory is the directory of the file in the active
+window (for an unnamed new file - the current DSS directory).
+
+Build (F9)          if BUILD.BAT exists, runs "SYSTEM.EXE /C BUILD.BAT";
+                    otherwise, if MAKEFILE exists, runs "MAKE.EXE".
+Run (Ctrl+F9)       if RUN.BAT exists, runs "SYSTEM.EXE /C RUN.BAT"
+                    with the session parameters appended; otherwise
+                    runs "MAKE.EXE run" when MAKEFILE has a "run:"
+                    target.
+Parameters...       the text appended to RUN.BAT this session
+                    (up to 64 characters; not used with MAKE.EXE).
+Target...           lists the explicit targets found in MAKEFILE and
+                    runs "MAKE.EXE <target>". Assignments (name:=...),
+                    pattern rules (%), $-expanded and "-" names are
+                    not offered.
+Show console log    the saved text screen with the child's output
+                    (and the console as it was when Kode started);
+                    any fresh key press returns to the editor.
+
+If files were modified, Kode asks to save them before launching.
+A non-zero exit code shows "Exit code N - press any key" and waits;
+a zero code returns to the editor immediately. Note that the DSS
+SYSTEM.EXE shell always finishes BAT processing with code 0, so
+reliable exit codes come from EXE tools such as MAKE.EXE.
+
+
+SYNTAX HIGHLIGHTING
+-------------------
+Highlighting is driven by profiles in SYNTAX\ next to KODE.EXE.
+INDEX.LST maps file extensions (or a bare name like "makefile") to a
+profile, e.g. "asm.syn=asm,z80,tas,inc,s". If INDEX.LST has no match,
+Kode tries SYNTAX\<ext>.SYN directly. The shipped profiles cover
+assembler, C, Pascal, BAT and makefiles.
+
+A profile is a plain-text file you can edit or write yourself:
+
+  case_sensitive=0|1
+  line_comment=;            (up to 3 chars; starts a line comment)
+  line_comment2={           (for Pascal also enables {...} and (* *)
+                             block comments)
+  string_delims="'          (characters that open string literals)
+  brackets=()[]<>           (highlighted bracket characters)
+  keywords=word1,word2,...  (group 1, e.g. instructions)
+  keywords2=word1,word2,... (group 2, e.g. registers)
+
+Group/item colors for every screen element, including all syntax
+groups, are configured in Options -> Colors.
+
+
+OPTIONS
+-------
+Options -> Editor...
+
+  Insert mode           insert characters instead of overwriting
+  Overwrite blocks      pasting a block overwrites existing text
+                        instead of inserting
+  Syntax highlight      highlight while typing and browsing
+  Truncate line         table-style editing: the cursor is not bound
+                        by the typed text and can be placed anywhere
+                        in the 240-column line
+  Keyboard              A - qwerty / B - dvorak letter layout
+  Auto hidden mouse     hide the mouse pointer while typing
+  Optimal tabulation    on save, replace leading spaces with TABs
+  Label Tab size        tab position for the label field
+  Tab size              tab position for the command field
+  Tab width             TAB counts as 4 or 8 spaces on file import
+
+Options -> Colors...  pick a group (Desktop, Browser, Dialog window,
+                      Text window, Syntaxis, Miscellaneous), then an
+                      item, then foreground and background colors.
+
+Options -> Save setup writes everything to KODE.SET next to
+KODE.EXE; it is read automatically on the next start. The file is
+plain text and can be edited by hand.
+
+
+NOTES
+-----
+- Print / Printer setup, Run -> Call debugger and the Help topics
+  are menu placeholders in this version.
+- There is no Undo: deleting a block is permanent (the clipboard
+  keeps the last cut/copied block until the next one).
+- Without the SYNTAX directory the editor still works; highlighting
+  is simply off.
