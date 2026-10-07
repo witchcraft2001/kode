@@ -300,20 +300,32 @@ BamNone	POP	AF
 	RET
 ;[]===========================================================[]
 ; Patch DsureWn's SurName (PG1) with the fixed save prompt.
+; SurName is a fixed 36-byte field inside the descriptor stream: the
+; parser lands on the next object right after it, so bytes 0..34 must
+; stay non-zero and the terminator belongs to the last byte only.
 BldPatchSure
 	IN	A,(SLOT2)
 	PUSH	AF
 	LD	A,(DialogPg1)
 	OUT	(SLOT2),A
+	LD	DE,SurName
+	LD	A,#20
+	LD	B,35
+BpsFill	LD	(DE),A
+	INC	DE
+	DJNZ	BpsFill
+	XOR	A
+	LD	(DE),A
 	LD	HL,BldTxMod
 	LD	DE,SurName
 BpsCp	LD	A,(HL)
+	OR	A
+	JR	Z,BpsDone
 	LD	(DE),A
 	INC	HL
 	INC	DE
-	OR	A
-	JR	NZ,BpsCp
-	POP	AF
+	JR	BpsCp
+BpsDone	POP	AF
 	OUT	(SLOT2),A
 	RET
 ;[]===========================================================[]

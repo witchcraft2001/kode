@@ -21,7 +21,7 @@ A PS/2 keyboard is required; a mouse is optional but recommended.
 
 QUICK START
 -----------
-1. Unpack the archive into a directory, e.g. C:\KODE\. For work you
+1. Unpack the archive into a directory, e.g. C:\DEV\KODE\. For work you
    need KODE.EXE and the SYNTAX\ subdirectory (syntax profiles; without
    it the editor still runs, highlighting is just disabled).
 
